@@ -103,6 +103,7 @@ const M3 = (() => {
   async function setCover(url) {
     lastCover = url || '';
     setBackdrop(document.getElementById('bg'), url);
+    if (window.Liquid) Liquid.setBackground(enabled ? url : '');
     setBackdrop(document.querySelector('#player .pbg'), url);
     const c = await extract(url);
     if (url === lastCover) applyColor(c);

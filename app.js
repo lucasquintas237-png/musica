@@ -544,7 +544,7 @@ const App = {
       ${!opts.noArtist && t.dur ? `<span class="d">${fmt(t.dur)}</span>` : ''}
       <button class="opt" aria-label="Opciones">${icon('more')}</button></div>`);
     r.addEventListener('click', e => {
-      if (e.target.closest('.opt')) { e.stopPropagation(); return this.trackMenu(t, opts, i); }
+      if (e.target.closest('.opt')) { e.stopPropagation(); return this.trackMenu(t, { ...opts, origin: e.target.closest('.opt') }, i); }
       if (opts.onClick) return opts.onClick(t, i);
       this.playList(list, i, opts.from || '');
     });
@@ -585,7 +585,11 @@ const App = {
   },
 
   /* hoja de acciones */
-  sheet({ title, sub, img, items = [], body }) {
+  sheet({ title, sub, img, items = [], body, origin }) {
+    // menú que nace del botón pulsado (cristal líquido), si no hay formulario ni reproductor abierto
+    if (origin && !body && window.Glass && Glass.menu && !$('#player').classList.contains('open') && origin.isConnected) {
+      return Glass.menu(origin, { title, sub, img: img ? small(img) : '', items });
+    }
     const sh = $('#sheet');
     sh.innerHTML = '';
     const box = el('<div class="box" role="dialog" aria-modal="true"></div>');
@@ -616,7 +620,7 @@ const App = {
   trackMenu(t, opts = {}, i) {
     const fav = Library.isFav(t.id);
     this.sheet({
-      title: t.title, sub: t.artist, img: t.cover, items: [
+      title: t.title, sub: t.artist, img: t.cover, origin: opts.origin, items: [
         { icon: 'playnext', label: 'Reproducir a continuación', fn: () => this.playNext(t) },
         { icon: 'queue', label: 'Añadir a la cola', fn: () => this.addToQueue(t) },
         { icon: 'radio', label: 'Iniciar radio', fn: () => Features.startRadio(t) },
@@ -781,6 +785,7 @@ const App = {
 
     // botón atrás del navegador/Android
     addEventListener('popstate', () => {
+      if (window.Glass && Glass.menuOpen) { Glass.closeMenu(); return; }
       if (!$('#sheet').hidden) { this.closeSheet(); return; }
       if ($('#player').classList.contains('open')) { this.closePlayer(true); return; }
       if (this.views.length) this.closeView();

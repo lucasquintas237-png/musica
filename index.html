@@ -174,28 +174,51 @@ kbd{font:12px/1 ui-monospace,Menlo,Consolas,monospace;padding:3px 6px;border-rad
 #mini .bar{position:absolute;left:14px;right:14px;bottom:3px;height:2px;border-radius:1px;background:var(--line)}
 #mini .bar i{display:block;height:100%;width:0;background:var(--primary);border-radius:1px}
 
-/* ------------------------------------------------------------------ barra Liquid Glass (glass.js) */
+/* ------------------------------------------------------------------ Liquid Glass (liquid.js + glass.js) */
+/* Con WebGL2 (html.lg) el cristal lo dibuja un canvas detrás de todo; los elementos data-glass
+   quedan transparentes y solo aportan su forma. Sin WebGL2, desenfoque con backdrop-filter. */
+#lg-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:none}
+.lg #lg-canvas{display:block}
+.lg #bg{display:none}
+.lg [data-glass]{background:transparent!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.lg [data-glass]::after{display:none!important}
+.lg [data-glass-paint] .ic,.lg [data-glass-paint] span{opacity:0}  /* se pintan en el canvas para poder refractarlos */
+/* el contenido que se desplaza se funde antes de llegar a las barras de abajo (el cristal está detrás) */
+.lg .tab,.lg .view{-webkit-mask-image:linear-gradient(#000 calc(100% - var(--lg-dock,0px) - 26px),transparent calc(100% - var(--lg-dock,0px) + 2px));
+  mask-image:linear-gradient(#000 calc(100% - var(--lg-dock,0px) - 26px),transparent calc(100% - var(--lg-dock,0px) + 2px))}
+html:not(.lg) [data-glass]{-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);
+  box-shadow:inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-edge), 0 8px 30px rgba(0,0,0,.18)}
+
 #tabwrap{position:fixed;z-index:6;left:50%;bottom:calc(var(--tab-gap) + var(--safe-b));transform:translateX(-50%);
   width:min(var(--tab-w), calc(100vw - 2 * var(--gutter)));height:var(--tab-h);touch-action:none;user-select:none;-webkit-user-select:none}
-.tb-bar{position:absolute;inset:0;border-radius:calc(var(--tab-h) / 2);background:var(--glass-fill);
-  -webkit-backdrop-filter:blur(6px) saturate(1.8);backdrop-filter:blur(6px) saturate(1.8);
-  box-shadow:0 8px 40px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.10), 0 0 0 1px var(--glass-edge)}
-.tb-bar::after,.tb-pill::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
-  box-shadow:inset 1px 1px 0 -.5px var(--glass-rim), inset -1px -1px 0 -.5px rgba(255,255,255,.12), inset 0 0 6px rgba(255,255,255,.06)}
+.tb-bar{position:absolute;inset:0;border-radius:calc(var(--tab-h) / 2);background:var(--glass-fill)}
 .tb-row{position:absolute;left:0;top:0;height:var(--tab-h);display:flex;padding:0 4px}
 .tb-item{width:var(--item-w);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--tab-ic)}
 .tb-item .ic{width:25px;height:25px}
 .tb-item span{font-size:10px;font-weight:600;letter-spacing:.01em;line-height:12px}
-.tb-base{-webkit-mask-image:var(--hole);mask-image:var(--hole)}
-.tb-active .tb-item{color:var(--blue)}
-.tb-pill{position:absolute;left:0;top:4px;height:54px;width:var(--item-w);border-radius:27px;background:var(--pill-fill);
-  will-change:transform;pointer-events:none;transform-origin:50% 50%;
-  box-shadow:0 0 0 0 rgba(0,0,0,0);transition:background .25s, box-shadow .25s}
-.tb-pill.press{background:rgba(255,255,255,.02);box-shadow:0 6px 22px rgba(0,0,0,.22), 0 0 0 .5px rgba(0,0,0,.18)}
-.tb-pill.glass{-webkit-backdrop-filter:blur(3px) saturate(1.6) brightness(1.04);backdrop-filter:blur(3px) saturate(1.6) brightness(1.04)}
-.tb-lens{position:absolute;inset:0;border-radius:inherit;overflow:hidden}
-.tb-lens .tb-row{transform-origin:0 0;will-change:transform}
-.tb-pill.press .tb-active{filter:drop-shadow(-.6px 0 0 rgba(255,40,90,.35)) drop-shadow(.6px 0 0 rgba(40,160,255,.35))}
+.tb-item[aria-selected="true"]{color:#3d9bff}
+.tb-pill{position:absolute;left:4px;top:4px;height:54px;width:var(--item-w);border-radius:27px;background:var(--pill-fill);pointer-events:none}
+html:not(.lg) .tb-pill.lifted{background:rgba(255,255,255,.04)}
+
+/* selector segmentado con píldora */
+.seg{position:relative;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.seg button{position:relative;z-index:1}
+.seg button.on{background:none!important;color:var(--fg)!important;font-weight:600}
+.seg-pill{position:absolute;left:3px;top:3px;height:30px;width:60px;border-radius:15px;background:var(--card-strong);pointer-events:none}
+
+/* menú que nace de un botón */
+.lg-menu-scrim{position:fixed;inset:0;z-index:23}
+.lg-menu-shape{position:fixed;z-index:24;pointer-events:none;background:transparent}
+html:not(.lg) .lg-menu-shape{background:color-mix(in srgb, var(--sheet) calc(var(--f,0) * 100%), transparent)}
+.lg-menu{position:fixed;z-index:25;overflow-y:auto;scrollbar-width:none;border-radius:28px}
+.lg-menu::-webkit-scrollbar{display:none}
+.lg-menu-in{padding:6px;transform-origin:50% 0;will-change:transform,filter}
+.lg-menu .head{display:flex;gap:12px;align-items:center;padding:8px 10px 10px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.lg-menu .head img{width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none}
+.lg-menu .head b{display:block;font-size:14.5px}.lg-menu .head span{display:block;font-size:12.5px}
+.lg-menu .it{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;border-radius:16px;text-align:left;font-size:15px}
+.lg-menu .it:hover,.lg-menu .it:focus-visible{background:var(--card);outline:0}
+.lg-menu .it .ic{color:var(--fg2);width:22px;height:22px}
 
 /* ------------------------------------------------------------------ reproductor completo */
 #player{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;overflow:hidden;
@@ -345,7 +368,7 @@ input[type=range]::-moz-range-thumb{width:6px;height:22px;border:0;border-radius
 <div id="view" hidden></div>
 
 <!-- mini reproductor -->
-<div id="mini" hidden>
+<div id="mini" data-glass data-glass-dock hidden>
   <img alt="">
   <div class="txt"><div class="t ellipsis"></div><div class="s ellipsis"></div></div>
   <button class="b" data-act="toggle" aria-label="Reproducir o pausar"><svg class="ic"><use href="#i-play"/></svg></button>
@@ -355,13 +378,13 @@ input[type=range]::-moz-range-thumb{width:6px;height:22px;border:0;border-radius
 
 <!-- barra Liquid Glass -->
 <div id="tabwrap" role="tablist" aria-label="Secciones">
-  <div class="tb-bar"></div>
-  <div class="tb-row tb-base">
+  <div class="tb-bar" data-glass data-glass-dock></div>
+  <div class="tb-pill" data-glass data-layer="1" data-sel></div>
+  <div class="tb-row tb-base" data-glass-paint="--tab-ic">
     <button class="tb-item" role="tab" data-tab="home"><svg class="ic"><use href="#i-home"/></svg><span>Menú</span></button>
     <button class="tb-item" role="tab" data-tab="search"><svg class="ic"><use href="#i-search"/></svg><span>Buscador</span></button>
     <button class="tb-item" role="tab" data-tab="settings"><svg class="ic"><use href="#i-gear"/></svg><span>Configuración</span></button>
   </div>
-  <div class="tb-pill"><div class="tb-lens"></div></div>
 </div>
 
 <!-- reproductor completo -->
@@ -405,6 +428,7 @@ input[type=range]::-moz-range-thumb{width:6px;height:22px;border:0;border-radius
 <div id="yt-host"><div id="yt"></div></div>
 
 <script src="m3.js"></script>
+<script src="liquid.js"></script>
 <script src="glass.js"></script>
 <script src="app.js"></script>
 <script src="features.js"></script>
