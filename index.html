@@ -555,9 +555,12 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
   transition:color .4s,filter .5s,transform .6s var(--spring)}
 .kk-lines p.near,.kk-lines p.done{filter:none}
 .kk-lines p.done{color:color-mix(in srgb,var(--on-surface) 45%,transparent)}
-.kk-lines p.on{filter:none;transform:none;color:transparent;
-  background:linear-gradient(90deg,var(--on-surface) calc(var(--k,0%) - 4%),color-mix(in srgb,var(--on-surface) 38%,transparent) calc(var(--k,0%) + 4%));
-  -webkit-background-clip:text;background-clip:text}
+/* línea que suena: el texto tenue siempre se ve y encima una copia a todo color que se destapa
+   (no se usa background-clip:text: Chrome a veces no lo pinta dentro de capas animadas y la línea desaparecía) */
+.kk-lines p{position:relative}
+.kk-lines p.on{filter:none;transform:none;color:color-mix(in srgb,var(--on-surface) 40%,transparent)}
+.kk-lines p.on::after{content:attr(data-t);position:absolute;inset:0;color:var(--on-surface);pointer-events:none;
+  clip-path:inset(-.2em calc(100% - var(--k,0%)) -.2em 0)}
 
 /* modo coche (car.js) */
 #car{position:fixed;inset:0;z-index:46;display:flex;flex-direction:column;background:var(--surface);color:var(--on-surface);

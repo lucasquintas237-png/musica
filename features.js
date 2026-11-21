@@ -159,7 +159,7 @@ const Features = (() => {
       <div class="kk-bg"></div>
       <div class="kk-top"><div class="kk-info ellipsis"><b class="ellipsis">${esc(t.title)}</b><span class="ellipsis">${esc(t.artist)}</span></div>
         <button class="icb kk-close" aria-label="Cerrar">${icon('close')}</button></div>
-      <div class="kk-view"><div class="kk-lines">${lyr.lines.map((l, i) => `<p data-i="${i}">${esc(l.text || '♪')}</p>`).join('')}</div></div></div>`);
+      <div class="kk-view"><div class="kk-lines">${lyr.lines.map((l, i) => `<p data-i="${i}" data-t="${esc(l.text || '♪')}">${esc(l.text || '♪')}</p>`).join('')}</div></div></div>`);
     ov.querySelector('.kk-bg').style.backgroundImage = `url("${String(t.cover || '').replace(/"/g, '%22')}")`;
     document.body.appendChild(ov);
     const box = ov.querySelector('.kk-lines'), ps = [...box.children];
