@@ -281,7 +281,7 @@ const Glass = (() => {
     box.style.left = fx + 'px'; box.style.top = fy + 'px';
 
     const icon = btn.querySelector('svg') || btn;
-    const app = [document.getElementById('app'), document.getElementById('view')];
+    const app = [document.getElementById('app'), document.getElementById('view'), document.getElementById('now')];
     const docked = [document.getElementById('mini'), document.getElementById('tabwrap')];
     const p = { x: 0, v: 0 };
     let raf = 0, lastT = 0;
@@ -342,10 +342,16 @@ const Glass = (() => {
       if (window.Liquid) Liquid.setDim(dimv);
       const a = (1 - .5 * dimv).toFixed(3);
       if (window.Liquid && Liquid.active) {
-        const X = cx - w / 2, Y = cyy - h / 2, rr = r;
-        const path = `M0 0H${vw}V${vh}H0Z M${X + rr} ${Y}H${X + w - rr}A${rr} ${rr} 0 0 1 ${X + w} ${Y + rr}V${Y + h - rr}A${rr} ${rr} 0 0 1 ${X + w - rr} ${Y + h}H${X + rr}A${rr} ${rr} 0 0 1 ${X} ${Y + h - rr}V${Y + rr}A${rr} ${rr} 0 0 1 ${X + rr} ${Y}Z`;
-        const url = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${vw}' height='${vh}'><path fill-rule='evenodd' fill='black' fill-opacity='${a}' d='${path}'/></svg>`)}")`;
-        app.forEach(el => { if (el) { el.style.maskImage = el.style.webkitMaskImage = url; el.style.maskSize = el.style.webkitMaskSize = '100% 100%'; } });
+        // máscara con un agujero con la forma del menú, en coordenadas de cada capa
+        app.forEach(el => {
+          if (!el) return;
+          const er = el.getBoundingClientRect();
+          if (!er.width || !er.height) return;
+          const X = cx - w / 2 - er.left, Y = cyy - h / 2 - er.top, rr = r, EW = er.width, EH = er.height;
+          const path = `M0 0H${EW}V${EH}H0Z M${X + rr} ${Y}H${X + w - rr}A${rr} ${rr} 0 0 1 ${X + w} ${Y + rr}V${Y + h - rr}A${rr} ${rr} 0 0 1 ${X + w - rr} ${Y + h}H${X + rr}A${rr} ${rr} 0 0 1 ${X} ${Y + h - rr}V${Y + rr}A${rr} ${rr} 0 0 1 ${X + rr} ${Y}Z`;
+          const url = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${EW}' height='${EH}'><path fill-rule='evenodd' fill='black' fill-opacity='${a}' d='${path}'/></svg>`)}")`;
+          el.style.maskImage = el.style.webkitMaskImage = url; el.style.maskSize = el.style.webkitMaskSize = '100% 100%';
+        });
       } else app.forEach(el => { if (el) el.style.opacity = a; });
       docked.forEach(el => { if (el) el.style.opacity = a; });
     }

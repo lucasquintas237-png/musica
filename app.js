@@ -41,6 +41,42 @@ function cover(u, size = 544) {
 const small = u => cover(u, 120);
 const PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#2a2a32"/><path d="M12 6v7.55A3 3 0 1013.5 16V9h3V6h-4.5z" fill="#666" transform="translate(-1 0)"/></svg>');
 
+/* Imágenes que siempre cargan: si una portada falla (404, bloqueo por referer, red), se prueba
+   a través del proxy local y con otros tamaños antes de poner el marcador. */
+const proxied = u => '/api/img?u=' + encodeURIComponent(u);
+function imgAlternatives(u) {
+  if (u.startsWith('/api/img')) { try { u = new URL(u, location.href).searchParams.get('u') || ''; } catch (_) { return []; } }
+  if (!/^https?:/i.test(u)) return [];
+  const out = [proxied(u)];
+  if (/googleusercontent\.com|ggpht\.com/.test(u)) {
+    const base = u.replace(/=[^/=]*$/, '');
+    out.push(base + '=s544', proxied(base + '=s544'), proxied(base + '=s226'), proxied(base));
+  }
+  const yt = u.match(/i\.ytimg\.com\/vi(?:_webp)?\/([^/]+)\//);
+  if (yt) ['hqdefault.jpg', 'mqdefault.jpg', 'default.jpg'].forEach(f => out.push(proxied(`https://i.ytimg.com/vi/${yt[1]}/${f}`)));
+  return [...new Set(out)];
+}
+function retryImg(im) {
+  const src = im.getAttribute('src') || '';
+  if (!src || src.startsWith('data:')) return;
+  // la misma <img> puede recibir otra portada (mini reproductor): entonces se empieza de cero
+  if (!im.dataset.orig || src !== im.dataset.last) { im.dataset.orig = src; im.dataset.tries = 0; }
+  const alts = imgAlternatives(im.dataset.orig).filter(x => x !== im.dataset.orig);
+  const n = +(im.dataset.tries || 0);
+  im.dataset.tries = n + 1;
+  const next = n < alts.length ? alts[n] : PLACEHOLDER;
+  im.dataset.last = next;
+  im.src = next;
+}
+document.addEventListener('error', e => { if (e.target instanceof HTMLImageElement) retryImg(e.target); }, true);
+// YouTube devuelve una imagen gris de 120×90 cuando no hay miniatura: también se cuenta como fallo
+document.addEventListener('load', e => {
+  const im = e.target;
+  if (im instanceof HTMLImageElement && im.naturalWidth === 120 && im.naturalHeight === 90 && /ytimg/.test(im.dataset.orig || im.src) && /maxres|sd|hq/.test(im.src)) retryImg(im);
+}, true);
+// al volver la conexión, reintentar las que se quedaron con el marcador
+addEventListener('online', () => $$('img[data-orig]').forEach(im => { if (im.src.startsWith('data:')) { im.dataset.tries = 0; im.src = im.dataset.orig; } }));
+
 /* ======================================================================= YouTube Music */
 const YTM = (() => {
   const ctx = { client: { clientName: 'WEB_REMIX', clientVersion: '1.20241106.01.00', hl: 'es', gl: 'ES' } };
@@ -536,7 +572,7 @@ const App = {
 
   /* ---------------- piezas de interfaz ---------------- */
   trackRow(t, i, list, opts = {}) {
-    const lead = opts.numbers ? `<span class="num">${i + 1}</span>` : `<img class="art" loading="lazy" src="${esc(small(t.cover) || PLACEHOLDER)}" alt="">`;
+    const lead = opts.numbers ? `<span class="num">${i + 1}</span>` : `<img class="art" decoding="async" src="${esc(small(t.cover) || PLACEHOLDER)}" alt="">`;
     const sub = opts.noArtist ? (t.dur ? fmt(t.dur) : '') : [t.artist, opts.showAlbum && t.album].filter(Boolean).join(' · ');
     const r = el(`<div class="row" data-id="${esc(t.id)}" role="button" tabindex="0">
       ${lead}
@@ -561,7 +597,7 @@ const App = {
   },
   card(item, onClick, round) {
     const c = el(`<div class="card${round ? ' round' : ''}" role="button" tabindex="0">
-      <img loading="lazy" src="${esc(cover(item.cover, 300) || PLACEHOLDER)}" alt="">
+      <img decoding="async" src="${esc(cover(item.cover, 300) || PLACEHOLDER)}" alt="">
       <div class="t ellipsis">${esc(item.title || item.name)}</div><div class="s ellipsis">${esc(item.sub || item.artist || '')}</div></div>`);
     c.addEventListener('click', () => onClick(item));
     c.addEventListener('keydown', e => { if (e.key === 'Enter') onClick(item); });
