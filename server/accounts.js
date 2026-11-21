@@ -60,12 +60,28 @@ function setCookie(request, token, maxAge) {
   return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
+// sesiones ya comprobadas en esta instancia del Worker (evita consultar D1 en cada portada)
+const seen = new Map();
+const SEEN_MS = 60 * 1000;
+
 async function currentUser(request, db) {
   const t = cookieOf(request);
   if (!t) return null;
+  const c = seen.get(t);
+  if (c && c.until > Date.now()) return c.user;
   const row = await db.prepare('SELECT u.id, u.username FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND s.expires > ?')
     .bind(await sha256(t), Date.now()).first();
+  if (row) { seen.set(t, { user: row, until: Date.now() + SEEN_MS }); if (seen.size > 500) seen.delete(seen.keys().next().value); }
   return row || null;
+}
+
+/* Para el resto de /api/ (búsqueda, letras, portadas...): devuelve null si hay sesión válida
+   o la respuesta 401 que hay que enviar. Sin base de datos configurada no se exige nada. */
+export async function requireSession(request, env) {
+  if (!env.DB) return null;
+  await schema(env.DB);
+  if (await currentUser(request, env.DB)) return null;
+  return err(401, 'Inicia sesión para usar la app');
 }
 
 async function startSession(request, db, user) {
@@ -118,7 +134,7 @@ export async function handleAccounts(request, env, path) {
 
   if (path === 'auth/logout' && m === 'POST') {
     const t = cookieOf(request);
-    if (t) await db.prepare('DELETE FROM sessions WHERE token = ?').bind(await sha256(t)).run();
+    if (t) { seen.delete(t); await db.prepare('DELETE FROM sessions WHERE token = ?').bind(await sha256(t)).run(); }
     return json(200, { ok: true }, { 'Set-Cookie': setCookie(request, '', 0) });
   }
 

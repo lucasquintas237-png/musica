@@ -25,6 +25,22 @@ const Account = (() => {
 
   const timers = new Map(), pending = new Set();
 
+  // si el servidor dice que no hay sesión (caducada o cerrada en otro sitio), vuelve la bienvenida
+  const nativeFetch = window.fetch.bind(window);
+  let expiredShown = false;
+  window.fetch = async (...a) => {
+    const r = await nativeFetch(...a);
+    try {
+      const u = new URL(typeof a[0] === 'string' ? a[0] : a[0].url, location.href);
+      if (r.status === 401 && u.origin === location.origin && u.pathname.startsWith('/api/') && !u.pathname.startsWith('/api/auth/') && !expiredShown) {
+        expiredShown = true;
+        if (who) { toast('La sesión ha caducado. Vuelve a entrar.'); setTimeout(() => switchTo(''), 800); }
+        else if (supported !== false) showGate('login');
+      }
+    } catch (_) {}
+    return r;
+  };
+
   async function api(method, path, body, keepalive) {
     const opt = { method, credentials: 'same-origin', headers: {} };
     if (body !== undefined) { opt.body = typeof body === 'string' ? body : JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }

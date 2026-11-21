@@ -3,7 +3,7 @@
    el resto de /api/... lo atiende el mismo intermediario que usa Cloudflare Pages (functions/api/[[path]].js);
    todo lo demás (index.html, *.js, iconos...) son archivos estáticos servidos por Cloudflare. */
 import { onRequest } from './functions/api/[[path]].js';
-import { handleAccounts } from './server/accounts.js';
+import { handleAccounts, requireSession } from './server/accounts.js';
 
 export default {
   async fetch(request, env) {
@@ -15,6 +15,9 @@ export default {
         try { return await handleAccounts(request, env, p); }
         catch (e) { return new Response(JSON.stringify({ error: 'Error del servidor: ' + (e && e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json; charset=utf-8' } }); }
       }
+      // todo lo demás (búsqueda, letras, Spotify, portadas) exige haber iniciado sesión
+      try { const denied = await requireSession(request, env); if (denied) return denied; }
+      catch (e) { return new Response(JSON.stringify({ error: 'Error del servidor: ' + (e && e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json; charset=utf-8' } }); }
       return onRequest({ request, params: { path: p.split('/') } });
     }
     return env.ASSETS.fetch(request);
