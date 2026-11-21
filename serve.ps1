@@ -161,6 +161,25 @@ $worker = {
       return
     }
 
+    # --- Deezer: búsqueda, datos de canción (BPM) y fragmentos de 30 s para medir el BPM ---
+    if ($path -eq '/api/deezer/search') {
+      Proxy $stream 'GET' ("https://api.deezer.com/search?" + $query) $null @{} 'max-age=86400'
+      return
+    }
+    if ($path -match '^/api/deezer/track/(\d{1,15})$') {
+      Proxy $stream 'GET' ("https://api.deezer.com/track/" + $Matches[1]) $null @{} 'max-age=86400'
+      return
+    }
+    if ($path -eq '/api/deezer/preview') {
+      $u = ''
+      foreach ($kv in $query.Split('&')) { if ($kv.StartsWith('u=')) { $u = [Uri]::UnescapeDataString($kv.Substring(2)) } }
+      $uri = $null
+      if (-not [Uri]::TryCreate($u, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https') { Send-Text $stream 400 'url'; return }
+      if ($uri.Host -notmatch '(^|\.)dzcdn\.net$') { Send-Text $stream 403 'host'; return }
+      Proxy $stream 'GET' $uri.AbsoluteUri $null @{} 'max-age=86400'
+      return
+    }
+
     # --- Letras (LRCLIB) ---
     if ($path -match '^/api/lrc/(get|search)$') {
       Proxy $stream 'GET' ("https://lrclib.net/api/" + $Matches[1] + "?" + $query) $null @{ 'Lrclib-Client' = 'MusicaLocal/1.0' } 'max-age=86400'

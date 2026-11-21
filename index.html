@@ -456,6 +456,23 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 .lyrics.syncing p{color:var(--fg2);outline:1px dashed var(--outline-variant);outline-offset:4px;border-radius:12px}
 .lyrics.syncing p:hover{color:var(--primary)}
 
+/* BPM (bpm.js) */
+.bpm-chip{display:inline-flex;align-items:center;height:28px;margin-top:6px;padding:0 12px;border-radius:14px;font-size:13px;font-weight:600;
+  background:var(--secondary-container);color:var(--on-secondary-container);font-variant-numeric:tabular-nums;transition:border-radius .35s var(--spring),opacity .2s}
+.bpm-chip:active{border-radius:8px}
+.bpm-chip.loading{opacity:.55}
+.bpm-chip.est::after{content:"≈";margin-left:4px;opacity:.7}
+.bpm-sheet{display:flex;flex-direction:column;align-items:center;gap:10px;padding:4px 12px 8px;text-align:center}
+.bpm-big{font-size:64px;line-height:1;font-weight:700;letter-spacing:-.03em;font-variation-settings:"ROND" 100;font-variant-numeric:tabular-nums}
+.bpm-big small{display:block;font-size:14px;font-weight:600;letter-spacing:.1em;color:var(--fg2);margin-top:4px}
+.bpm-src,.bpm-help{margin:0;font-size:13.5px}
+.bpm-tap{width:168px;height:168px;margin:8px 0;display:grid;place-content:center;gap:4px;background:var(--primary);color:var(--on-primary);
+  clip-path:var(--shape-cookie9);font-weight:600;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.bpm-tap b{font-size:22px}
+.bpm-tap.pulse{animation:bpmPulse .25s var(--ease-emph)}
+@keyframes bpmPulse{from{transform:scale(.9) rotate(-8deg)}to{transform:none}}
+.bpm-sheet .acct-actions{width:100%}
+
 /* cuentas (account.js) */
 #tab-home .wrap{position:relative}
 .acct-btn{position:absolute;right:var(--gutter);top:8px;z-index:2;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;
@@ -798,6 +815,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="features.js"></script>
 <script src="sources.js"></script>
 <script src="now.js"></script>
+<script src="bpm.js"></script>
 <script src="fx.js"></script>
 </body>
 </html>

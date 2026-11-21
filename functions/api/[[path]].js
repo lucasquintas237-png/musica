@@ -5,6 +5,7 @@
      GET  /api/lrc/{get|search}?...                                          -> LRCLIB (letras)
      GET  /api/spotify/{playlist|album|track}/ID                             -> página embed de Spotify
      GET  /api/img?u=https://...                                             -> portadas (para leer sus colores)
+     GET  /api/deezer/{search?q=|track/ID|preview?u=}                        -> Deezer (BPM y fragmentos de 30 s)
    Los archivos estáticos (index.html, *.js...) los sirve Cloudflare Pages directamente. */
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -51,6 +52,19 @@ export async function onRequest({ request, params }) {
       return pass(fetch(`https://lrclib.net/api/${lrc[1]}${url.search}`, {
         headers: { 'Lrclib-Client': 'MusicaLocal/1.0 (Cloudflare Pages)', 'User-Agent': UA }
       }), 'public, max-age=86400');
+    }
+
+    // --- Deezer: búsqueda, datos de canción (BPM) y fragmentos de 30 s para medir el BPM ---
+    if (path === 'deezer/search') {
+      return pass(fetch(`https://api.deezer.com/search${url.search}`, { headers: { 'User-Agent': UA } }), 'public, max-age=86400');
+    }
+    const dz = path.match(/^deezer\/track\/(\d{1,15})$/);
+    if (dz) return pass(fetch(`https://api.deezer.com/track/${dz[1]}`, { headers: { 'User-Agent': UA } }), 'public, max-age=86400');
+    if (path === 'deezer/preview') {
+      let u;
+      try { u = new URL(url.searchParams.get('u') || ''); } catch (_) { return text(400, 'url'); }
+      if (u.protocol !== 'https:' || !/(^|\.)dzcdn\.net$/.test(u.hostname)) return text(403, 'host');
+      return pass(fetch(u.href, { headers: { 'User-Agent': UA } }), 'public, max-age=86400');
     }
 
     // --- Spotify (página embed pública de una lista, álbum o canción) ---
