@@ -10,10 +10,11 @@
 //   --ecc M           corrección de errores: L, M, Q o H (por defecto M)
 //   --salida qr       nombre base de los archivos (por defecto "qr")
 // Crea:
-//   <salida>-base.stl      la placa (imprímela en color claro)
-//   <salida>-codigo.stl    los cuadritos del QR (en color oscuro, encima de la placa)
-//   <salida>-completo.stl  las dos piezas juntas en un solo archivo
-//   <salida>-vista.svg     vista previa para comprobar el QR con el móvil antes de imprimir
+//   <salida>-una-pieza.stl  RECOMENDADO: placa y relieve fundidos en un único cuerpo cerrado; no se
+//                           desmonta. Para dos colores basta UN cambio de filamento a la altura de la placa.
+//   <salida>-base.stl       solo la placa (para impresoras multicolor, como pieza aparte)
+//   <salida>-codigo.stl     solo los cuadritos (piezas sueltas: no imprimir solo)
+//   <salida>-vista.svg      vista previa para comprobar el QR con el móvil antes de imprimir
 //
 // El QR se genera según la norma ISO/IEC 18004 (modo byte, Reed-Solomon, máscaras),
 // basado en el algoritmo de referencia de Project Nayuki.
@@ -229,6 +230,51 @@ function stlBoxes(boxes) {
   return buf;
 }
 
+/* Un único cuerpo cerrado: la placa y el relieve fundidos en una sola malla (mapa de alturas).
+   Cada celda es una columna de altura "placa" o "placa + relieve"; solo hay paredes donde cambia
+   la altura y en el borde, así que no hay piezas sueltas que se despeguen al sacarlo. */
+export function heightmapTris(H, cell, zBase) {
+  const rows = H.length, cols = H[0].length, tris = [];
+  const add = (q, out) => {
+    // dos triángulos por cuadrilátero, orientados hacia "out"
+    const [a, b, c] = q, u = b.map((v, i) => v - a[i]), w = c.map((v, i) => v - a[i]);
+    const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+    if (n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0) q = [q[0], q[3], q[2], q[1]];
+    tris.push([out, q[0], q[1], q[2]], [out, q[0], q[2], q[3]]);
+  };
+  const X = i => i * cell, Y = j => j * cell;
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const h = H[j][i], x0 = X(i), x1 = X(i + 1), y0 = Y(j), y1 = Y(j + 1);
+    add([[x0, y0, h], [x1, y0, h], [x1, y1, h], [x0, y1, h]], [0, 0, 1]);       // arriba
+    add([[x0, y0, 0], [x1, y0, 0], [x1, y1, 0], [x0, y1, 0]], [0, 0, -1]);      // abajo
+    // paredes con la celda de la derecha y la de arriba (o con el borde)
+    const side = (h2, pts, dir) => {
+      if (h2 === h) return;
+      const lo = Math.min(h, h2), hi = Math.max(h, h2), out = h > h2 ? dir : dir.map(v => -v);
+      // en el borde (h2 = 0) se parte en tramos para que las aristas coincidan con las vecinas
+      const levels = h2 === 0 && h > zBase ? [0, zBase, h] : [lo, hi];
+      for (let k = 0; k < levels.length - 1; k++) add([[...pts[0], levels[k]], [...pts[1], levels[k]], [...pts[1], levels[k + 1]], [...pts[0], levels[k + 1]]], out);
+    };
+    side(i + 1 < cols ? H[j][i + 1] : 0, [[x1, y0], [x1, y1]], [1, 0, 0]);
+    side(j + 1 < rows ? H[j + 1][i] : 0, [[x0, y1], [x1, y1]], [0, 1, 0]);
+    if (i === 0) side(0, [[x0, y0], [x0, y1]], [-1, 0, 0]);
+    if (j === 0) side(0, [[x0, y0], [x1, y0]], [0, -1, 0]);
+  }
+  return tris;
+}
+
+function stlTris(tris) {
+  const buf = Buffer.alloc(84 + tris.length * 50);
+  buf.write('QR imprimible (una pieza) - tools/qr-stl.mjs', 0, 'ascii');
+  buf.writeUInt32LE(tris.length, 80);
+  let o = 84;
+  for (const [n, a, b, c] of tris) {
+    for (const val of [...n, ...a, ...b, ...c]) { buf.writeFloatLE(val, o); o += 4; }
+    buf.writeUInt16LE(0, o); o += 2;
+  }
+  return buf;
+}
+
 /* ============================================================ programa */
 function args(argv) {
   const o = { ancho: 80, base: 2, relieve: 1, margen: 2, ecc: 'M', salida: 'qr', texto: '' };
@@ -240,12 +286,19 @@ function args(argv) {
   return o;
 }
 
-const isMain = import.meta.url === new URL(process.argv[1], 'file:').href || process.argv[1].endsWith('qr-stl.mjs');
+const isMain = !!process.argv[1] && /qr-stl\.mjs$/.test(process.argv[1]);
 if (isMain && process.argv.length > 2) {
   const o = args(process.argv.slice(2));
   if (!o.texto) { console.error('Indica el texto o la URL: node tools/qr-stl.mjs https://...'); process.exit(1); }
   const qr = makeQR(o.texto, String(o.ecc).toUpperCase());
+  o.margen = Math.max(1, Math.round(o.margen));
   const n = qr.size + o.margen * 2, m = o.ancho / n;     // tamaño de cada módulo en mm
+  // mapa de alturas (fila 0 abajo en el modelo; la fila 0 del QR queda arriba)
+  const H = Array.from({ length: n }, (_, j) => Array.from({ length: n }, (_, i) => {
+    const qx = i - o.margen, qy = n - 1 - j - o.margen;
+    const dark = qx >= 0 && qy >= 0 && qx < qr.size && qy < qr.size && qr.modules[qy][qx];
+    return dark ? o.base + o.relieve : o.base;
+  }));
   const base = [[0, 0, 0, o.ancho, o.ancho, o.base]];
   // cuadritos oscuros: se unen los que van seguidos en cada fila para que el archivo sea ligero
   const code = [];
@@ -261,11 +314,12 @@ if (isMain && process.argv.length > 2) {
   }
   writeFileSync(o.salida + '-base.stl', stlBoxes(base));
   writeFileSync(o.salida + '-codigo.stl', stlBoxes(code));
-  writeFileSync(o.salida + '-completo.stl', stlBoxes(base.concat(code)));
+  writeFileSync(o.salida + '-una-pieza.stl', stlTris(heightmapTris(H, m, o.base)));
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" width="600" height="600" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/>`;
   qr.modules.forEach((row, y) => row.forEach((d, x) => { if (d) svg += `<rect x="${x + o.margen}" y="${y + o.margen}" width="1" height="1"/>`; }));
   writeFileSync(o.salida + '-vista.svg', svg + '</svg>');
   console.log(`QR versión ${qr.version} (${qr.size}×${qr.size} módulos), corrección ${qr.ecl}, máscara ${qr.mask}`);
   console.log(`Placa ${o.ancho}×${o.ancho}×${o.base} mm, módulo de ${m.toFixed(2)} mm, relieve ${o.relieve} mm (${code.length} piezas unidas)`);
-  console.log(`Archivos: ${o.salida}-base.stl, ${o.salida}-codigo.stl, ${o.salida}-completo.stl, ${o.salida}-vista.svg`);
+  console.log(`Archivos: ${o.salida}-una-pieza.stl (recomendado), ${o.salida}-base.stl, ${o.salida}-codigo.stl, ${o.salida}-vista.svg`);
+  console.log(`Para dos colores con una sola pieza: un único cambio de filamento a ${o.base} mm de altura.`);
 }
