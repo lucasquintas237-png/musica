@@ -59,22 +59,99 @@ const M3 = (() => {
 
   function isDark() { return root.dataset.theme !== 'light'; }
 
-  // Paleta tonal (aproximación HSL a los tonos 80/20/30/90 de Material 3)
+  // Paleta tonal de Material 3 (aproximación HSL a los tonos de primario, secundario,
+  // terciario y las superficies, todas teñidas con el tono de la portada)
   function applyColor(c) {
     if (!c || !enabled) c = { h: 214, s: .7, l: .5 };
     last = c;
     const h = Math.round(c.h), s = Math.round(Math.min(90, Math.max(c.s < .1 ? 8 : 38, c.s * 100)));
+    const s2 = Math.round(s * .38), s3 = Math.round(s * .55), sn = Math.min(14, Math.round(s * .2)), t = (h + 60) % 360;
+    const hsl = (hh, ss, ll, a) => a == null ? `hsl(${hh} ${ss}% ${ll}%)` : `hsl(${hh} ${ss}% ${ll}% / ${a})`;
     const dark = isDark();
-    const v = dark
-      ? { primary: `hsl(${h} ${s}% 76%)`, on: `hsl(${h} ${Math.min(s, 70)}% 15%)`, cont: `hsl(${h} ${Math.min(s, 55)}% 27%)`, onCont: `hsl(${h} ${s}% 90%)`, bg: `hsl(${h} ${Math.min(s, 30)}% 7%)` }
-      : { primary: `hsl(${h} ${s}% 36%)`, on: '#fff', cont: `hsl(${h} ${s}% 88%)`, onCont: `hsl(${h} ${Math.min(s, 70)}% 14%)`, bg: `hsl(${h} ${Math.min(s, 40)}% 95%)` };
-    root.style.setProperty('--primary', v.primary);
-    root.style.setProperty('--on-primary', v.on);
-    root.style.setProperty('--primary-container', v.cont);
-    root.style.setProperty('--on-primary-container', v.onCont);
-    root.style.setProperty('--bg', v.bg);
+    const v = dark ? {
+      'primary': hsl(h, s, 80), 'on-primary': hsl(h, Math.min(s, 70), 18), 'primary-container': hsl(h, Math.min(s, 55), 30), 'on-primary-container': hsl(h, s, 91),
+      'secondary-container': hsl(h, s2, 26), 'on-secondary-container': hsl(h, s2, 90),
+      'tertiary-container': hsl(t, s3, 28), 'on-tertiary-container': hsl(t, s3, 91),
+      'surface': hsl(h, sn, 6.5), 'surface-c-low': hsl(h, sn, 9.5), 'surface-c': hsl(h, sn, 11.5), 'surface-c-high': hsl(h, sn, 15), 'surface-c-highest': hsl(h, sn, 19),
+      'on-surface': hsl(h, sn, 91), 'on-surface-variant': hsl(h, sn, 76), 'outline': hsl(h, sn, 57), 'outline-variant': hsl(h, sn, 29),
+      'inverse-surface': hsl(h, sn, 90), 'inverse-on-surface': hsl(h, sn, 18),
+      'shade-top': hsl(h, sn, 6.5, .72), 'shade-bot': hsl(h, sn, 6.5, .95)
+    } : {
+      'primary': hsl(h, s, 38), 'on-primary': '#fff', 'primary-container': hsl(h, s, 90), 'on-primary-container': hsl(h, Math.min(s, 70), 14),
+      'secondary-container': hsl(h, s2 + 10, 87), 'on-secondary-container': hsl(h, s2, 15),
+      'tertiary-container': hsl(t, s3, 88), 'on-tertiary-container': hsl(t, s3, 15),
+      'surface': hsl(h, sn + 20, 98), 'surface-c-low': hsl(h, sn + 14, 95.5), 'surface-c': hsl(h, sn + 12, 93.5), 'surface-c-high': hsl(h, sn + 10, 91), 'surface-c-highest': hsl(h, sn + 8, 88.5),
+      'on-surface': hsl(h, sn, 11), 'on-surface-variant': hsl(h, sn, 30), 'outline': hsl(h, sn, 48), 'outline-variant': hsl(h, sn, 80),
+      'inverse-surface': hsl(h, sn, 19), 'inverse-on-surface': hsl(h, sn + 10, 95),
+      'shade-top': hsl(h, sn + 20, 98, .7), 'shade-bot': hsl(h, sn + 20, 98, .95)
+    };
+    Object.entries(v).forEach(([k, val]) => root.style.setProperty('--' + k, val));
+    root.style.setProperty('--bg', v.surface);
     const meta = document.querySelector('meta[name=theme-color]');
-    if (meta) meta.content = dark ? '#101014' : '#f3f3f6';
+    if (meta) meta.content = v.surface;
+  }
+
+  /* Menú de Material 3 que sale del botón pulsado (escala desde su esquina). */
+  let menuState = null;
+  function closeMenu(after) {
+    const m = menuState;
+    if (!m) { after && after(); return; }
+    menuState = null;
+    m.box.classList.remove('in');
+    m.box.classList.add('out');
+    removeEventListener('keydown', m.onKey, true);
+    removeEventListener('resize', m.onResize);
+    const done = () => { m.scrim.remove(); m.box.remove(); after && after(); };
+    matchMedia('(prefers-reduced-motion: reduce)').matches ? done() : setTimeout(done, 150);
+  }
+  function menu(btn, { title, sub, img, items = [] }) {
+    if (menuState) { const m = menuState; menuState = null; m.scrim.remove(); m.box.remove(); }
+    const e = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const scrim = document.createElement('div');
+    scrim.className = 'm3-scrim';
+    const box = document.createElement('div');
+    box.className = 'm3-menu';
+    box.setAttribute('role', 'menu');
+    if (title) box.innerHTML = `<div class="head">${img ? `<img src="${e(img)}" alt="">` : ''}<div class="ellipsis"><b class="ellipsis">${e(title)}</b><span class="muted ellipsis">${e(sub || '')}</span></div></div>`;
+    items.filter(Boolean).forEach((it, i) => {
+      const b = document.createElement('button');
+      b.className = 'mi'; b.setAttribute('role', 'menuitem'); b.style.setProperty('--i', i);
+      b.innerHTML = `<svg class="ic"><use href="#i-${e(it.icon || 'note')}"/></svg><span class="ellipsis">${e(it.label)}</span>`;
+      b.onclick = () => closeMenu(it.fn);
+      box.appendChild(b);
+    });
+    document.body.append(scrim, box);
+
+    // sitio: pegado al botón, por debajo si cabe y si no por encima; sin tapar la barra
+    const vw = innerWidth, vh = innerHeight, br = btn.getBoundingClientRect();
+    const tb = document.getElementById('tabwrap');
+    const botMax = Math.min(vh - 12, tb ? tb.getBoundingClientRect().top - 8 : vh - 12);
+    const w = box.offsetWidth, h = Math.min(box.scrollHeight, botMax - 12);
+    box.style.maxHeight = h + 'px';
+    const x = Math.max(12, Math.min(br.right - w, vw - 12 - w));
+    const below = br.bottom + 4 + h <= botMax;
+    const y = below ? br.bottom + 4 : Math.max(12, br.top - 4 - h);
+    box.style.left = x + 'px'; box.style.top = y + 'px';
+    box.style.transformOrigin = `${Math.max(0, Math.min(w, br.left + br.width / 2 - x))}px ${below ? 0 : h}px`;
+
+    const onKey = ev => {
+      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeMenu(); btn.focus && btn.focus(); }
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        const its = [...box.querySelectorAll('.mi')], k = its.indexOf(document.activeElement);
+        const n = ev.key === 'ArrowDown' ? (k + 1) % its.length : (k - 1 + its.length) % its.length;
+        its[n] && its[n].focus();
+      }
+    };
+    // en el móvil la barra del navegador cambia el alto al desplazar: solo se cierra si cambia el ancho
+    const w0 = innerWidth;
+    const onResize = () => { if (innerWidth !== w0) closeMenu(); };
+    menuState = { box, scrim, onKey, onResize };
+    scrim.addEventListener('pointerdown', ev => { ev.preventDefault(); closeMenu(); });
+    addEventListener('keydown', onKey, true);
+    addEventListener('resize', onResize);
+    requestAnimationFrame(() => requestAnimationFrame(() => box.classList.add('in')));
+    setTimeout(() => { const f = box.querySelector('.mi'); f && f.focus({ preventScroll: true }); }, 80);
   }
 
   // Fondo: portada desenfocada en tres capas (fondo, medio, cerca) con fundido al cambiar
@@ -166,5 +243,8 @@ const M3 = (() => {
     };
   }
 
-  return { setCover, applyColor: () => applyColor(last), setEnabled, Wave, extract, get enabled() { return enabled; } };
+  return {
+    setCover, applyColor: () => applyColor(last), setEnabled, Wave, extract, menu, closeMenu,
+    get menuOpen() { return !!menuState; }, get enabled() { return enabled; }
+  };
 })();

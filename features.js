@@ -476,7 +476,7 @@ const Features = (() => {
         <div class="set" style="cursor:default">${icon('theme')}<div class="lbl">Tema</div>
           <div class="seg" id="seg-theme">${[['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Oscuro']].map(([v, l]) => `<button data-v="${v}" class="${theme === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="set" data-k="dynamic">${icon('palette')}<div class="lbl">Color dinámico<small>Fondo y colores tomados de la portada</small></div>${sw(s.dynamic !== false)}</div>
-        <div class="set" data-k="refraction">${icon('search')}<div class="lbl">Refracción del cristal<small>${Glass.supported ? 'Cristal líquido con WebGL: refracción, aberración y brillos' : 'Tu navegador no tiene WebGL2; aquí se usa desenfoque'}</small></div>${sw(s.refraction !== false && Glass.supported)}</div>
+        <div class="set" data-k="refraction">${icon('search')}<div class="lbl">Cristal de la barra de navegación<small>${Glass.supported ? 'Cristal líquido con WebGL: refracción, aberración y brillos' : 'Tu navegador no tiene WebGL2; aquí se usa desenfoque'}</small></div>${sw(s.refraction !== false && Glass.supported)}</div>
       </div>
       <h2 class="sec">Reproducción</h2>
       <div class="group">
@@ -497,9 +497,12 @@ const Features = (() => {
       <div class="group">
         <div class="set" style="cursor:default">${icon('info')}<div class="lbl">Música<small>Búsqueda en YouTube Music · letras de LRCLIB · servidor en ${esc(location.host || 'local')}</small></div></div>
       </div>`;
-    $$('.group', b).forEach(g => g.setAttribute('data-glass', ''));
-    // la píldora anima el cambio; no se vuelve a pintar el bloque para no cortar la animación
-    Glass.segmented($('#seg-theme', b), (i, btn) => { setSetting('theme', btn.dataset.v); applyTheme(); });
+    // grupo de botones conectados: solo cambia la selección, sin volver a pintar el bloque
+    const segBtns = $$('#seg-theme button', b);
+    segBtns.forEach(x => x.onclick = () => {
+      setSetting('theme', x.dataset.v); applyTheme();
+      segBtns.forEach(y => { y.classList.toggle('on', y === x); y.setAttribute('aria-pressed', y === x); });
+    });
     $$('.set[data-k]', b).forEach(x => x.onclick = () => {
       const k = x.dataset.k, cur = settings()[k] !== false, v = !cur;
       if (k === 'refraction' && !Glass.supported) return toast('Tu navegador no admite la refracción; se usa desenfoque');

@@ -67,7 +67,27 @@ function retryImg(im) {
   const next = n < alts.length ? alts[n] : PLACEHOLDER;
   im.dataset.last = next;
   im.src = next;
+  // agotadas las variantes: se vuelve a intentar más tarde (3 rondas, cada vez esperando más)
+  if (next === PLACEHOLDER) {
+    const round = +(im.dataset.round || 0), orig = im.dataset.orig;
+    if (round < 3) setTimeout(() => {
+      if (!im.isConnected || im.dataset.last !== PLACEHOLDER || im.dataset.orig !== orig) return;
+      im.dataset.round = round + 1; im.dataset.tries = 0; im.dataset.last = orig;
+      im.src = orig;
+    }, 4000 * (round + 1));
+  }
 }
+// imágenes que se quedan colgadas (red lenta): pasados 12 s sin cargar, se prueba la siguiente variante
+const imgSeen = new WeakMap();
+setInterval(() => {
+  const now = Date.now();
+  document.querySelectorAll('img[src]').forEach(im => {
+    if (im.complete || im.getAttribute('src').startsWith('data:')) { imgSeen.delete(im); return; }
+    const s = imgSeen.get(im);
+    if (!s || s.src !== im.src) imgSeen.set(im, { src: im.src, t: now });
+    else if (now - s.t > 12000) { imgSeen.delete(im); retryImg(im); }
+  });
+}, 3000);
 document.addEventListener('error', e => { if (e.target instanceof HTMLImageElement) retryImg(e.target); }, true);
 // YouTube devuelve una imagen gris de 120×90 cuando no hay miniatura: también se cuenta como fallo
 document.addEventListener('load', e => {
@@ -560,6 +580,7 @@ const App = {
     if (this.wave && !this.wave.dragging) { this.wave.set(dur ? cur / dur : 0); $('#p-cur').textContent = fmt(cur); }
     $('#p-dur').textContent = fmt(dur);
     $('#mini .bar i').style.width = (dur ? cur / dur * 100 : 0) + '%';
+    $('#mini').style.setProperty('--p', dur ? Math.min(1, cur / dur).toFixed(4) : 0);
     if (this.state.playing) {
       Library.addTime(t, .25);
       if (!this._counted && cur > Math.min(30, dur / 2)) { this._counted = true; Library.countPlay(t); }
@@ -622,9 +643,9 @@ const App = {
 
   /* hoja de acciones */
   sheet({ title, sub, img, items = [], body, origin }) {
-    // menú que nace del botón pulsado (cristal líquido), si no hay formulario ni reproductor abierto
-    if (origin && !body && window.Glass && Glass.menu && !$('#player').classList.contains('open') && origin.isConnected) {
-      return Glass.menu(origin, { title, sub, img: img ? small(img) : '', items });
+    // menú M3 que sale del botón pulsado, si no hay formulario ni reproductor abierto
+    if (origin && !body && !$('#player').classList.contains('open') && origin.isConnected) {
+      return M3.menu(origin, { title, sub, img: img ? small(img) : '', items });
     }
     const sh = $('#sheet');
     sh.innerHTML = '';
@@ -821,7 +842,7 @@ const App = {
 
     // botón atrás del navegador/Android
     addEventListener('popstate', () => {
-      if (window.Glass && Glass.menuOpen) { Glass.closeMenu(); return; }
+      if (M3.menuOpen) { M3.closeMenu(); return; }
       if (!$('#sheet').hidden) { this.closeSheet(); return; }
       if ($('#player').classList.contains('open')) { this.closePlayer(true); return; }
       if (this.views.length) this.closeView();
