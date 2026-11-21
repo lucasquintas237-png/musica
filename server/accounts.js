@@ -40,7 +40,7 @@ function sameHash(a, b) {
 }
 
 let ready = null;
-function schema(db) {
+export function schema(db) {
   if (!ready) {
     ready = db.batch([
       db.prepare('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, hash TEXT NOT NULL, salt TEXT NOT NULL, iter INTEGER NOT NULL, created INTEGER NOT NULL)'),
@@ -64,7 +64,7 @@ function setCookie(request, token, maxAge) {
 const seen = new Map();
 const SEEN_MS = 60 * 1000;
 
-async function currentUser(request, db) {
+export async function currentUser(request, db) {
   const t = cookieOf(request);
   if (!t) return null;
   const c = seen.get(t);
