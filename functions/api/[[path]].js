@@ -58,8 +58,15 @@ export async function onRequest({ request, params }) {
     if (path === 'deezer/search') {
       return pass(fetch(`https://api.deezer.com/search${url.search}`, { headers: { 'User-Agent': UA } }), 'public, max-age=86400');
     }
-    const dz = path.match(/^deezer\/track\/(\d{1,15})$/);
-    if (dz) return pass(fetch(`https://api.deezer.com/track/${dz[1]}`, { headers: { 'User-Agent': UA } }), 'public, max-age=86400');
+    const dz = path.match(/^deezer\/(track|playlist|album)\/(\d{1,15})(\/tracks)?$/);
+    if (dz) return pass(fetch(`https://api.deezer.com/${dz[1]}/${dz[2]}${dz[3] || ''}${url.search}`, { headers: { 'User-Agent': UA } }), 'public, max-age=3600');
+    // Apple Music: página pública de una lista o álbum (para importarla)
+    if (path === 'apple') {
+      let u;
+      try { u = new URL(url.searchParams.get('u') || ''); } catch (_) { return text(400, 'url'); }
+      if (u.protocol !== 'https:' || u.hostname !== 'music.apple.com') return text(400, 'url');
+      return pass(fetch(u.href, { headers: { 'User-Agent': UA, 'Accept-Language': 'es-ES,es;q=0.9' } }), 'public, max-age=3600');
+    }
     if (path === 'deezer/preview') {
       let u;
       try { u = new URL(url.searchParams.get('u') || ''); } catch (_) { return text(400, 'url'); }

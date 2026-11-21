@@ -166,8 +166,19 @@ $worker = {
       Proxy $stream 'GET' ("https://api.deezer.com/search?" + $query) $null @{} 'max-age=86400'
       return
     }
-    if ($path -match '^/api/deezer/track/(\d{1,15})$') {
-      Proxy $stream 'GET' ("https://api.deezer.com/track/" + $Matches[1]) $null @{} 'max-age=86400'
+    if ($path -match '^/api/deezer/(track|playlist|album)/(\d{1,15})(/tracks)?$') {
+      $u = "https://api.deezer.com/" + $Matches[1] + "/" + $Matches[2] + $Matches[3]
+      if ($query) { $u += "?" + $query }
+      Proxy $stream 'GET' $u $null @{} 'max-age=3600'
+      return
+    }
+    # --- Apple Music: página pública de una lista o álbum (para importarla) ---
+    if ($path -eq '/api/apple') {
+      $u = ''
+      foreach ($kv in $query.Split('&')) { if ($kv.StartsWith('u=')) { $u = [Uri]::UnescapeDataString($kv.Substring(2)) } }
+      $uri = $null
+      if (-not [Uri]::TryCreate($u, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https' -or $uri.Host -ne 'music.apple.com') { Send-Text $stream 400 'url'; return }
+      Proxy $stream 'GET' $uri.AbsoluteUri $null @{} 'max-age=3600'
       return
     }
     if ($path -eq '/api/deezer/preview') {

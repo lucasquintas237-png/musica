@@ -478,6 +478,32 @@ html[data-fs="2"] .wrap,html[data-fs="2"] #player .pin,html[data-fs="2"] #sheet 
 html[data-fs="1"] .m3-menu .mi,html[data-fs="1"] .m3-menu .head{font-size:1.1em}
 html[data-fs="2"] .m3-menu .mi,html[data-fs="2"] .m3-menu .head{font-size:1.2em}
 
+/* bienvenida: elegir artistas (welcome.js) */
+#welcome{position:fixed;inset:0;z-index:42;display:flex;flex-direction:column;background:var(--surface);animation:fade .3s}
+#welcome.out{opacity:0;transition:opacity .3s}
+.wl-in{flex:1;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 28px) var(--gutter) 24px}
+.wl-in > *{max-width:900px;margin-left:auto;margin-right:auto}
+.wl-head{text-align:center;margin-bottom:18px}
+.wl-head h1{margin:12px 0 6px;font-size:clamp(28px,6vw,44px);font-weight:800;letter-spacing:-.02em;font-variation-settings:"ROND" 100}
+.wl-head p{margin:0}
+.wl-logo{width:64px;height:64px;margin:0 auto;display:grid;place-items:center;background:var(--primary);color:var(--on-primary);clip-path:var(--shape-cookie9);animation:spin 20s linear infinite}
+.wl-logo .ic{width:30px;height:30px;animation:spin 20s linear infinite reverse}
+.wl-search{position:static;max-width:520px}
+.wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:18px 12px;margin-top:8px}
+.wl-a{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:14px;font-weight:600;min-width:0;animation:itemIn .5s var(--ease-emph) both}
+.wl-a > span:last-child{max-width:100%}
+.wl-img{position:relative;width:100%;aspect-ratio:1;display:block;border-radius:50%;overflow:hidden;background:var(--surface-c-high);
+  transition:border-radius .5s var(--spring),transform .5s var(--spring),clip-path .5s var(--spring)}
+.wl-img img{width:100%;height:100%;object-fit:cover}
+.wl-a.on .wl-img{clip-path:var(--shape-cookie9);transform:scale(.92)}
+.wl-a.on .wl-img::after{content:"";position:absolute;inset:0;background:color-mix(in srgb,var(--primary) 50%,transparent)}
+.wl-a.on .wl-img::before{content:"";position:absolute;z-index:1;inset:30%;background:var(--on-primary);-webkit-mask:var(--check) center/contain no-repeat;mask:var(--check) center/contain no-repeat}
+.wl-a.on > span:last-child{color:var(--primary)}
+.wl-bar{display:flex;gap:10px;justify-content:center;padding:14px var(--gutter) calc(14px + var(--safe-b));background:var(--surface-c-low);box-shadow:0 -1px 0 var(--outline-variant)}
+.wl-bar .btn{min-width:150px;justify-content:center}
+.bio p{font-size:14.5px;line-height:1.55;margin:0 0 10px}
+.hero .actions .btn.on{background:var(--primary);color:var(--on-primary)}
+
 /* karaoke a pantalla completa (features.js > openKaraoke) */
 #karaoke{position:fixed;inset:0;z-index:44;overflow:hidden;background:var(--surface);color:var(--on-surface);animation:fade .3s;touch-action:none}
 #karaoke.out{opacity:0;transition:opacity .3s}
@@ -956,6 +982,8 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="reco.js"></script>
 <script src="wrapped.js"></script>
 <script src="car.js"></script>
+<script src="share.js"></script>
+<script src="welcome.js"></script>
 <script src="fx.js"></script>
 </body>
 </html>

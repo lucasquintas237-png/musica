@@ -443,6 +443,21 @@ const Features = (() => {
   }
   function failed(box, e) { box.innerHTML = `<div class="empty">No se pudo cargar. ${esc(e && e.message || '')}</div>`; }
 
+  /* artistas que sigues: pesan más en las recomendaciones y salen en "Novedades de tus artistas" */
+  const followed = () => store.get('followed', []);
+  const isFollowed = id => followed().some(a => a.id === id);
+  function toggleFollow(a) {
+    let f = followed();
+    const on = !f.some(x => x.id === a.id);
+    f = on ? [{ id: a.id, name: a.name, cover: a.cover }, ...f] : f.filter(x => x.id !== a.id);
+    store.set('followed', f.slice(0, 200));
+    toast(on ? `Sigues a ${a.name}` : `Ya no sigues a ${a.name}`);
+    window.Reco && Reco.invalidate();
+    return on;
+  }
+  const isRelease = c => /álbum|album|sencillo|single|ep\b/i.test(c.title || '');
+  const byYear = items => items.slice().sort((x, y) => (+y.year || 0) - (+x.year || 0));
+
   function openArtist(id, hint = {}) {
     if (!id) return toast('Artista no disponible');
     App.openView(hint.title, async box => {
@@ -450,22 +465,61 @@ const Features = (() => {
       try {
         const a = await YTM.artist(id);
         box.innerHTML = '';
-        hero(box, {
-          img: a.cover || hint.cover, title: a.name || hint.title, sub: a.songs.length ? 'Artista' : '', round: true,
+        const me = { id, name: a.name || hint.title, cover: a.cover || hint.cover };
+        const h = hero(box, {
+          img: me.cover, title: me.name, sub: esc(a.sub || (a.songs.length ? 'Artista' : '')), round: true,
           actions: [
             a.songs.length && { icon: 'play', label: 'Reproducir', fn: () => App.playList(a.songs, 0, a.name) },
+            { icon: isFollowed(id) ? 'heart-f' : 'heart', label: isFollowed(id) ? 'Siguiendo' : 'Seguir', tonal: true, fn: () => {} },
             a.songs.length && { icon: 'radio', label: 'Radio', tonal: true, fn: () => startRadio(a.songs[0]) },
             a.songs.length && { icon: 'shuffle', label: 'Aleatorio', tonal: true, fn: () => { App.setShuffle(true); App.playList(a.songs, 0, a.name); } }
           ]
         });
-        if (a.songs.length) { box.appendChild(App.section('Canciones')); box.appendChild(App.trackList(a.songs, { from: a.name, showAlbum: true })); }
-        a.carousels.forEach(c => {
+        // botón Seguir / Siguiendo
+        const fb = [...h.querySelectorAll('.actions .btn')].find(b => /Segui/.test(b.textContent));
+        if (fb) fb.onclick = () => { const on = toggleFollow(me); fb.innerHTML = `${icon(on ? 'heart-f' : 'heart')}${on ? 'Siguiendo' : 'Seguir'}`; fb.classList.toggle('on', on); };
+        // lo que más escuchas tú de este artista
+        const k = window.Reco ? Reco.artistKey(me.name) : '';
+        const mine = Object.values(Library.stats().plays || {}).filter(e => e.t && k && Reco.artistKey(e.t.artist) === k).sort((x, y) => y.n - x.n || y.secs - x.secs).slice(0, 5).map(e => e.t);
+        if (mine.length) { box.appendChild(App.section('Lo que más escuchas de ' + me.name)); box.appendChild(App.trackList(mine, { from: me.name })); }
+        if (a.songs.length) { box.appendChild(App.section('Canciones populares')); box.appendChild(App.trackList(a.songs, { from: a.name, showAlbum: true })); }
+        // discografía de lo más nuevo a lo más antiguo; artistas parecidos al final
+        a.carousels.slice().sort((x, y) => (isRelease(y) ? 1 : 0) - (isRelease(x) ? 1 : 0)).forEach(c => {
+          const items = isRelease(c) ? byYear(c.items).map(i => ({ ...i, sub: [i.year, i.sub && i.sub.replace(/^.*•\s*/, '')].filter(Boolean)[0] || i.sub })) : c.items;
           box.appendChild(App.section(c.title));
-          box.appendChild(App.shelf(c.items, it => App.openItem(it), c.items.every(i => i.kind === 'artist')));
+          box.appendChild(App.shelf(items, it => App.openItem(it), c.items.every(i => i.kind === 'artist')));
         });
-        if (a.desc) box.appendChild(el(`<p class="muted" style="margin-top:24px;font-size:14px">${esc(a.desc.slice(0, 600))}${a.desc.length > 600 ? '…' : ''}</p>`));
+        if (a.desc) {
+          const long = a.desc.length > 360;
+          const bio = el(`<div class="bio"><h2 class="sec"><span>Biografía</span></h2><p class="muted">${esc(long ? a.desc.slice(0, 360) + '…' : a.desc)}</p>${long ? '<button class="chip">Leer más</button>' : ''}</div>`);
+          if (long) bio.querySelector('.chip').onclick = e => { bio.querySelector('p').textContent = a.desc; e.currentTarget.remove(); };
+          box.appendChild(bio);
+        }
       } catch (e) { failed(box, e); }
     });
+  }
+
+  /* novedades de los artistas que sigues (lanzamientos más recientes; guardado unas horas) */
+  async function newReleases() {
+    const f = followed().slice(0, 8);
+    if (!f.length) return [];
+    let cache = {};
+    try { cache = JSON.parse(localStorage.getItem('mz:artistCache') || '{}'); } catch (_) {}
+    const all = await Promise.all(f.map(async x => {
+      const c = cache[x.id];
+      if (c && Date.now() - c.t < 12 * 3600e3) return c.items;
+      try {
+        const a = await YTM.artist(x.id);
+        const items = a.carousels.filter(isRelease).flatMap(c => c.items).map(i => ({ ...i, artist: i.artist || a.name, sub: [a.name, i.year].filter(Boolean).join(' · ') }));
+        cache[x.id] = { t: Date.now(), items: byYear(items).slice(0, 6) };
+        return cache[x.id].items;
+      } catch (_) { return []; }
+    }));
+    try { localStorage.setItem('mz:artistCache', JSON.stringify(cache)); } catch (_) {}
+    // intercalar artistas para que no salgan seguidos los del mismo
+    const out = [], lists = all.map(l => l.slice());
+    for (let round = 0; out.length < 14 && lists.some(l => l.length); round++) lists.forEach(l => { if (l.length && out.length < 14) out.push(l.shift()); });
+    return byYear(out);
   }
 
   function openAlbum(id, hint = {}) {
@@ -514,6 +568,7 @@ const Features = (() => {
           name: pl.name, tracks: pl.tracks, cover: pl.cover, playlistId: pid, rerender: render,
           sub: pl.tracks.length + ' canciones' + (pl.source ? ' · importada de ' + pl.source : ''),
           actions: [
+            { icon: 'link', label: 'Compartir', tonal: true, fn: () => window.Share && Share.share(pl.name, pl.tracks) },
             { icon: 'queue', label: 'A la cola', tonal: true, fn: () => App.addToQueue(pl.tracks) },
             { icon: 'more', label: 'Más', tonal: true, fn: () => App.sheet({ title: pl.name, items: [
               { icon: 'lyrics', label: 'Renombrar', fn: () => App.prompt('Nuevo nombre', pl.name, n => { Library.renamePlaylist(pid, n); render(); }) },
@@ -529,7 +584,7 @@ const Features = (() => {
     App.openView('Favoritas', box => {
       const render = () => {
         const favs = Library.favs();
-        listPage(box, { name: 'Favoritas', tracks: favs, sub: favs.length + ' canciones' });
+        listPage(box, { name: 'Favoritas', tracks: favs, sub: favs.length + ' canciones', actions: [{ icon: 'link', label: 'Compartir', tonal: true, fn: () => window.Share && Share.share('Mis favoritas', favs) }] });
       };
       render();
     });
@@ -646,7 +701,8 @@ const Features = (() => {
       </div>
       <h2 class="sec">Biblioteca</h2>
       <div class="group">
-        <div class="set" data-a="import-link">${icon('link')}<div class="lbl">Importar lista<small>Pega un enlace de Spotify o YouTube Music</small></div></div>
+        <div class="set" data-a="artists">${icon('person')}<div class="lbl">Tus artistas favoritos<small>${followed().length ? 'Sigues a ' + followed().length + ' artistas' : 'Elige artistas para personalizar el inicio'}</small></div></div>
+        <div class="set" data-a="import-link">${icon('link')}<div class="lbl">Importar lista<small>Spotify, YouTube Music, Deezer o Apple Music</small></div></div>
         <div class="set" data-a="stats">${icon('chart')}<div class="lbl">Estadísticas</div></div>
         <div class="set" data-a="export">${icon('download')}<div class="lbl">Exportar datos<small>Favoritas, listas, historial y estadísticas</small></div></div>
         <div class="set" data-a="import">${icon('upload')}<div class="lbl">Importar datos<small>Desde una copia exportada</small></div></div>
@@ -685,7 +741,7 @@ const Features = (() => {
       refreshSettings();
     });
     $$('.set[data-a]', b).forEach(x => x.onclick = () => ({
-      timer: () => timerMenu(), 'import-link': () => Sources.importPrompt(), stats: () => openStats(),
+      timer: () => timerMenu(), 'import-link': () => Sources.importPrompt(), artists: () => window.Welcome && Welcome.open(), stats: () => openStats(),
       export: () => exportData(), import: () => importData(),
       'clear-hist': () => App.sheet({ title: '¿Borrar el historial?', sub: 'Las estadísticas también se reinician', items: [{ icon: 'trash', label: 'Borrar', fn: () => { store.set('history', []); store.set('stats', { plays: {}, days: {}, total: 0 }); toast('Historial borrado'); } }] })
     }[x.dataset.a])());
@@ -710,7 +766,7 @@ const Features = (() => {
   return {
     renderSearch, renderSettings, refreshSettings, togglePanel, startRadio, extendRadio, timerMenu, consumeEndOfTrack,
     endOfTrackPending: () => timer.endOfTrack || timer.songs === 1,
-    openKaraoke,
+    openKaraoke, followed, toggleFollow, newReleases,
     openArtist, openAlbum, openPlaylist, openFavorites, openStats, exportData, importData, doSearch, applyTheme
   };
 })();

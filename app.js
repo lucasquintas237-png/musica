@@ -273,7 +273,7 @@ const YTM = (() => {
       title: txt(walk(c.header, 'title')[0]),
       items: walk(c.contents, 'musicTwoRowItemRenderer').map(parseTwoRow)
     })).filter(c => c.items.length);
-    return { name: h.title, cover: h.cover, desc: h.desc, songs, carousels };
+    return { name: h.title, cover: h.cover, desc: h.desc, sub: [h.sub, h.second].filter(Boolean).join(' · '), songs, carousels };
   }
 
   async function playlist(id) {
@@ -1062,14 +1062,25 @@ const App = {
       $('[data-go]', w).onclick = () => Glass.select('search');
     }
 
-    if (hist.length) {
-      w.appendChild(this.section('Escuchado recientemente', () => this.openView('Recientes', b => { b.appendChild(el('<h1 class="title">Recientes</h1>')); b.appendChild(this.trackList(hist, { from: 'Recientes' })); })));
-      w.appendChild(this.shelf(hist.slice(0, 14).map(t => ({ ...t, sub: t.artist })), t => this.playNow(t, 'Recientes')));
+    const seeded = hist.length || store.get('seedSongs', []).length || store.get('followed', []).length;
+    if (seeded) {
+      if (hist.length) {
+        w.appendChild(this.section('Escuchado recientemente', () => this.openView('Recientes', b => { b.appendChild(el('<h1 class="title">Recientes</h1>')); b.appendChild(this.trackList(hist, { from: 'Recientes' })); })));
+        w.appendChild(this.shelf(hist.slice(0, 14).map(t => ({ ...t, sub: t.artist })), t => this.playNow(t, 'Recientes')));
+      }
       // recomendaciones según tus gustos (reco.js): Para ti, mezclas diarias y "Porque escuchaste"
-      const forBox = el('<div></div>'), mixBox = el('<div></div>'), becBox = el('<div></div>');
+      const forBox = el('<div></div>'), mixBox = el('<div></div>'), becBox = el('<div></div>'), newBox = el('<div></div>');
       let forYou = [];
       w.appendChild(this.section('Para ti', () => forYou.length && this.openMix({ title: 'Para ti', sub: 'Elegidas según lo que escuchas', cover: forYou[0].cover, tracks: forYou })));
-      w.appendChild(forBox); w.appendChild(mixBox); w.appendChild(becBox);
+      w.appendChild(forBox); w.appendChild(mixBox); w.appendChild(newBox); w.appendChild(becBox);
+      // novedades de los artistas que sigues
+      if (typeof Features !== 'undefined' && Features.newReleases && store.get('followed', []).length) {
+        Features.newReleases().then(list => {
+          if (!list.length) return;
+          newBox.appendChild(this.section('Novedades de tus artistas'));
+          newBox.appendChild(this.shelf(list, it => this.openItem(it)));
+        }).catch(() => {});
+      }
       this.loading(forBox);
       (window.Reco ? Reco.home() : Promise.reject()).then(d => {
         forYou = d.forYou || [];
@@ -1103,7 +1114,7 @@ const App = {
     tile(icon('heart-f'), 'Favoritas', favs.length + ' canciones', () => Features.openFavorites());
     pls.forEach(p => tile(p.cover || (p.tracks[0] && p.tracks[0].cover) ? `<img src="${esc(small(p.cover || p.tracks[0].cover))}" alt="">` : icon('lib'), p.name, p.tracks.length + ' canciones' + (p.source ? ' · ' + p.source : ''), () => Features.openPlaylist(p.id)));
     tile(icon('plus'), 'Nueva lista', 'Crear una lista vacía', () => this.prompt('Nombre de la lista', '', name => { Library.createPlaylist(name); this.renderHome(); }));
-    tile(icon('link'), 'Importar lista', 'Spotify o YouTube Music', () => Sources.importPrompt());
+    tile(icon('link'), 'Importar lista', 'Spotify, YouTube Music, Deezer o Apple', () => Sources.importPrompt());
     w.appendChild(tiles);
 
     const stats = Library.stats();

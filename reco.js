@@ -48,6 +48,10 @@ const Reco = (() => {
       if (k && sk) { const a = askips.get(k) || { s: 0, n: 0 }; a.s += sk; a.n += e.n || 0; askips.set(k, a); }
     });
     favs.forEach(t => add(t, 3));
+    // artistas que sigues y canciones elegidas en la bienvenida (pesan menos según crece tu historial)
+    (store.get('followed', []) || []).forEach(a => { const k = artistKey(a.name); if (k) artist.set(k, (artist.get(k) || 0) + 4); });
+    const fade = Math.exp(-hist.length / 30);
+    (store.get('seedSongs', []) || []).forEach(t => add(t, 2.5 * fade));
     const skipped = new Set(Object.values(stats.plays || {}).filter(e => (e.skips || 0) >= 2 && (e.skips || 0) > (e.n || 0)).map(e => e.t.id));
     const recent = new Set(hist.slice(0, 25).map(t => t.id));
     return { artist, song, tracks, askips, skipped, recent, hist, favs };

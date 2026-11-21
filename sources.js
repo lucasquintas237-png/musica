@@ -9,7 +9,7 @@ const Sources = (() => {
   /* ---------------- enlaces ---------------- */
   function parseLink(s) {
     s = (s || '').trim();
-    if (!/^(https?:\/\/)?([a-z0-9-]+\.)*(youtube\.com|youtu\.be|spotify\.com|spotify\.link)\//i.test(s) && !/^spotify:/.test(s)) return null;
+    if (!/^(https?:\/\/)?([a-z0-9-]+\.)*(youtube\.com|youtu\.be|spotify\.com|spotify\.link|deezer\.com|music\.apple\.com)\//i.test(s) && !/^spotify:/.test(s)) return null;
     let u;
     try { u = new URL(/^https?:/i.test(s) ? s : 'https://' + s); } catch (_) {
       const m = s.match(/^spotify:(playlist|album|track):([A-Za-z0-9]+)/);
@@ -31,7 +31,54 @@ const Sources = (() => {
       const m = u.pathname.match(/\/(playlist|album|track)\/([A-Za-z0-9]+)/);
       return m ? { src: 'spotify', kind: m[1], id: m[2] } : null;
     }
+    if (/deezer\.com$/.test(host)) {
+      const m = u.pathname.match(/\/(playlist|album|track)\/(\d+)/);
+      return m ? { src: 'deezer', kind: m[1], id: m[2] } : null;
+    }
+    if (host === 'music.apple.com') {
+      const m = u.pathname.match(/\/(playlist|album|song)\//);
+      return m ? { src: 'apple', kind: m[1] === 'song' || u.searchParams.get('i') ? 'track' : m[1], url: u.href, id: u.pathname } : null;
+    }
     return null;
+  }
+
+  /* Deezer: API pública (listas, álbumes y canciones; las listas largas vienen por páginas) */
+  async function fetchDeezer(kind, id) {
+    const get = async p => { const r = await fetch('/api/deezer/' + p); if (!r.ok) throw new Error('Deezer respondió ' + r.status); const j = await r.json(); if (j.error) throw new Error(j.error.message || 'Deezer: no encontrada'); return j; };
+    const map = (x, album) => ({ title: x.title_short || x.title, artist: (x.artist && x.artist.name) || '', dur: x.duration || 0, album: (x.album && x.album.title) || album || '' });
+    if (kind === 'track') { const t = await get('track/' + id); return { name: t.title, cover: t.album && t.album.cover_xl, tracks: [map(t)] }; }
+    const d = await get(`${kind}/${id}`);
+    const list = (d.tracks && d.tracks.data) || [];
+    const total = (d.tracks && d.tracks.total) || d.nb_tracks || list.length;
+    for (let idx = list.length; idx < Math.min(total, 1000); idx += 100) {
+      const page = await get(`${kind}/${id}/tracks?index=${idx}&limit=100`);
+      if (!page.data || !page.data.length) break;
+      list.push(...page.data);
+    }
+    return { name: d.title || 'Lista de Deezer', cover: d.picture_xl || d.cover_xl || '', tracks: list.map(x => map(x, kind === 'album' ? d.title : '')) };
+  }
+
+  /* Apple Music: su página pública lleva dentro los datos (título, artista y duración de cada canción) */
+  async function fetchApple(url) {
+    const r = await fetch('/api/apple?u=' + encodeURIComponent(url));
+    if (!r.ok) throw new Error('Apple Music respondió ' + r.status + (r.status === 404 ? ' (¿enlace correcto y público?)' : ''));
+    const html = await r.text();
+    const ssd = html.match(/<script[^>]*id="serialized-server-data"[^>]*>([\s\S]*?)<\/script>/);
+    if (!ssd) throw new Error('No se pudo leer la página de Apple Music');
+    const tracks = [], seen = new Set();
+    const walk = o => {
+      if (!o || typeof o !== 'object') return;
+      if (Array.isArray(o)) return o.forEach(walk);
+      if (typeof o.title === 'string' && typeof o.artistName === 'string' && (o.duration || o.durationInMilliseconds)) {
+        const k = o.title + '|' + o.artistName;
+        if (!seen.has(k)) { seen.add(k); tracks.push({ title: o.title, artist: o.artistName, dur: Math.round((o.duration || o.durationInMilliseconds || 0) / 1000), album: o.albumName || '' }); }
+      }
+      for (const k in o) walk(o[k]);
+    };
+    walk(JSON.parse(ssd[1]));
+    const meta = n => { const m = html.match(new RegExp(`<meta[^>]+property="${n}"[^>]+content="([^"]*)"`)); return m ? m[1] : ''; };
+    const name = (meta('og:title') || 'Lista de Apple Music').replace(/\s+([-–—]|on|en)\s+Apple Music$/i, '').replace(/&amp;/g, '&');
+    return { name, cover: meta('og:image'), tracks };
   }
 
   async function fetchSpotify(kind, id) {
@@ -59,6 +106,9 @@ const Sources = (() => {
 
   async function loadLink(link) {
     if (link.src === 'spotify') return { ...(await fetchSpotify(link.kind, link.id)), source: 'Spotify' };
+    const blank = d => ({ ...d, tracks: d.tracks.filter(t => t.title).map(t => ({ id: '', artistId: '', albumId: '', cover: '', ...t })) });
+    if (link.src === 'deezer') return { ...blank(await fetchDeezer(link.kind, link.id)), source: 'Deezer' };
+    if (link.src === 'apple') return { ...blank(await fetchApple(link.url)), source: 'Apple Music' };
     if (link.kind === 'playlist') return { ...(await YTM.playlist(link.id)), source: 'YouTube Music' };
     if (link.kind === 'album') { const a = await YTM.album(link.id); return { name: a.title, cover: a.cover, tracks: a.tracks, source: 'Álbum' }; }
     if (link.kind === 'video') { const t = await YTM.track(link.id); return { name: t ? t.title : 'Canción', cover: t && t.cover, tracks: t ? [t] : [], source: 'YouTube' }; }
@@ -88,7 +138,7 @@ const Sources = (() => {
   }
 
   function importPrompt() {
-    App.prompt('Importar lista (Spotify o YouTube Music)', '', async url => {
+    App.prompt('Importar lista (Spotify, YouTube Music, Deezer o Apple Music)', '', async url => {
       const link = parseLink(url);
       if (!link || link.kind === 'artist') return toast('Ese enlace no es de una lista, álbum o canción');
       toast('Importando…', 8000);
@@ -201,5 +251,5 @@ const Sources = (() => {
   const origState = App.onPlayerState.bind(App);
   App.onPlayerState = st => { if (st === 1) streak = 0; origState(st); };
 
-  return { parseLink, linkResult, importPrompt, openYTPlaylist, seeAll, resolve, onPlaybackError, fetchSpotify };
+  return { parseLink, linkResult, importPrompt, openYTPlaylist, seeAll, resolve, onPlaybackError, fetchSpotify, loadLink };
 })();
