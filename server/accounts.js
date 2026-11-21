@@ -14,7 +14,7 @@ const SESSION_DAYS = 180;
 const ITER = 10000;
 const USER_RE = /^[a-z0-9_.-]{3,24}$/i;
 // claves que se guardan en la cuenta (el resto, como la cola o la pestaña, es de cada dispositivo)
-const KEYS = new Set(['favs', 'playlists', 'history', 'stats', 'searchHist', 'settings', 'lyrOffsets', 'volume', 'shuffle', 'repeat', 'resolved', 'followed', 'seedSongs', 'onboarded']);
+const KEYS = new Set(['favs', 'playlists', 'history', 'stats', 'searchHist', 'settings', 'lyrOffsets', 'volume', 'shuffle', 'repeat', 'resolved', 'followed', 'seedSongs', 'onboarded', 'disliked']);
 const MAX_VALUE = 900 * 1024;
 
 const enc = new TextEncoder();

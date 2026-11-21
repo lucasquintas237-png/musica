@@ -498,8 +498,11 @@ const Library = {
     const s = this.stats(), now = new Date(), day = now.toISOString().slice(0, 10);
     const e = s.plays[t.id] || (s.plays[t.id] = { t: clean(t), n: 0, secs: 0 });
     e.secs += this._acc; s.total += this._acc; s.days[day] = (s.days[day] || 0) + this._acc;
-    // a qué horas escuchas (para el resumen)
-    s.hours = s.hours || {}; s.hours[now.getHours()] = (s.hours[now.getHours()] || 0) + this._acc;
+    // a qué horas escuchas (para el resumen) y a qué horas escuchas cada canción (para recomendar)
+    const hr = now.getHours();
+    s.hours = s.hours || {}; s.hours[hr] = (s.hours[hr] || 0) + this._acc;
+    e.h = e.h || {}; e.h[hr] = (e.h[hr] || 0) + this._acc;
+    e.last = Date.now();
     this._acc = 0;
     store.set('stats', s);
   }
@@ -964,6 +967,8 @@ const App = {
         opts.inQueue && { icon: 'trash', label: 'Quitar de la cola', fn: () => this.removeFromQueue(i) },
         t.id && window.BPM && { icon: 'chart', label: 'BPM de la canción', fn: () => BPM.sheet(t) },
         t.id && window.BPM && { icon: 'bolt', label: 'Mezcla con su ritmo', fn: () => BPM.tempoMix(t) },
+        t.id && window.Reco && { icon: 'close', label: 'No me interesa', fn: () => { Reco.dislike(t); toast('No te la recomendaremos más'); } },
+        t.id && window.Reco && t.artist && { icon: 'close', label: 'No me recomiendes a ' + t.artist.split(/,|&/)[0].trim(), fn: () => { Reco.dislike(t, true); toast('Vale, menos ' + t.artist.split(/,|&/)[0].trim()); } },
         t.id && this.canDownload && { icon: 'download', label: 'Descargar canción', fn: () => this.download(t) },
         t.id && { icon: 'link', label: 'Copiar enlace', fn: () => { navigator.clipboard && navigator.clipboard.writeText('https://music.youtube.com/watch?v=' + t.id).then(() => toast('Enlace copiado'), () => toast('No se pudo copiar')); } }
       ]

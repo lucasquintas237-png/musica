@@ -10,7 +10,7 @@
      hay cuentas: no sale la bienvenida y la app funciona en modo invitado. */
 const Account = (() => {
   // mismas claves que acepta el servidor (server/accounts.js)
-  const SYNC = ['favs', 'playlists', 'history', 'stats', 'searchHist', 'settings', 'lyrOffsets', 'volume', 'shuffle', 'repeat', 'resolved', 'followed', 'seedSongs', 'onboarded'];
+  const SYNC = ['favs', 'playlists', 'history', 'stats', 'searchHist', 'settings', 'lyrOffsets', 'volume', 'shuffle', 'repeat', 'resolved', 'followed', 'seedSongs', 'onboarded', 'disliked'];
   const DELAY = { stats: 20000 };              // las estadísticas cambian cada pocos segundos al escuchar
   const nsOf = name => 'mz:u:' + name.toLowerCase() + ':';
   const raw = (ns, k) => { try { return localStorage.getItem(ns + k); } catch (_) { return null; } };
