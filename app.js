@@ -715,7 +715,9 @@ const App = {
     }
     const sh = $('#sheet');
     sh.innerHTML = '';
+    sh.style.removeProperty('--k');
     const box = el('<div class="box" role="dialog" aria-modal="true"></div>');
+    box.appendChild(el('<div class="sheet-handle" role="button" tabindex="0" aria-label="Arrastra para cerrar o ampliar; toca para ampliar o reducir"></div>'));
     if (title) box.appendChild(el(`<div class="head">${img ? `<img src="${esc(small(img))}" alt="">` : ''}<div class="ellipsis"><b class="ellipsis">${esc(title)}</b><span class="muted">${esc(sub || '')}</span></div></div>`));
     items.filter(Boolean).forEach(it => {
       const b = el(`<button class="it">${icon(it.icon || 'note')}<span>${esc(it.label)}</span></button>`);
@@ -725,11 +727,79 @@ const App = {
     if (body) body(box);
     sh.appendChild(box);
     sh.hidden = false;
-    sh.onclick = e => { if (e.target === sh) this.closeSheet(); };
+    sh.onclick = e => { if (e.target === sh) this.closeSheet(true); };
+    this.sheetDrag(sh, box);
     const f = box.querySelector('input,button');
     f && setTimeout(() => f.focus(), 50);
   },
-  closeSheet() { $('#sheet').hidden = true; $('#sheet').innerHTML = ''; },
+  closeSheet(animate) {
+    const sh = $('#sheet'), box = $('.box', sh);
+    const done = () => { sh.hidden = true; sh.innerHTML = ''; sh.style.removeProperty('--k'); };
+    if (!animate || !box || sh.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return done();
+    // se va hacia abajo con aceleración (como al deslizarla) y el fondo se aclara
+    box.style.transition = 'transform .24s cubic-bezier(.3,0,.8,.15)';
+    box.style.transform = `translateY(${box.getBoundingClientRect().height + 40}px)`;
+    sh.style.transition = '--k .24s linear';
+    sh.style.setProperty('--k', 0);
+    setTimeout(done, 240);
+  },
+
+  /* Hoja inferior de Material 3: el asa de arriba se arrastra. Hacia abajo la cierra (si se
+     baja más de un tercio o con un gesto rápido); hacia arriba la amplía a casi toda la pantalla.
+     Tocar el asa alterna entre normal y ampliada. En pantallas táctiles también se puede
+     arrastrar desde el contenido si está desplazado del todo arriba. */
+  sheetDrag(sh, box) {
+    const handle = $('.sheet-handle', box);
+    const rubber = (d, dim) => (1 - 1 / (d * .55 / dim + 1)) * dim;
+    let d = null, block = false;
+    const setK = y => sh.style.setProperty('--k', Math.max(0, Math.min(1, 1 - y / Math.max(1, d ? d.h : 1))).toFixed(3));
+    const toggle = () => { box.classList.toggle('expanded'); };
+    handle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    box.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      const onHandle = !!e.target.closest('.sheet-handle, .head');
+      // desde el contenido solo con el dedo, si la hoja no está desplazada y no es un campo de texto
+      if (!onHandle && (e.pointerType !== 'touch' || box.scrollTop > 0 || e.target.closest('input,textarea,.bpm-tap,input[type=range]'))) return;
+      d = { id: e.pointerId, y0: e.clientY, last: e.clientY, t: e.timeStamp, v: 0, h: box.getBoundingClientRect().height, on: false, onHandle };
+    });
+    box.addEventListener('pointermove', e => {
+      if (!d || e.pointerId !== d.id) return;
+      const dy = e.clientY - d.y0;
+      if (!d.on) {
+        if (Math.abs(dy) < 6) return;
+        if (!d.onHandle && dy < 0) { d = null; return; }      // desde el contenido, hacia arriba es desplazar
+        d.on = true;
+        try { box.setPointerCapture(d.id); } catch (_) {}
+        box.style.transition = 'none'; sh.style.transition = 'none';
+      }
+      const dt = Math.max(1, e.timeStamp - d.t);
+      d.v = .7 * d.v + .3 * ((e.clientY - d.last) / dt * 1000); d.last = e.clientY; d.t = e.timeStamp;
+      // hacia abajo sigue al dedo; hacia arriba, con resistencia (anticipa la ampliación)
+      const y = dy >= 0 ? dy : -rubber(-dy, 60);
+      box.style.transform = `translateY(${y}px)`;
+      setK(Math.max(0, dy));
+      e.preventDefault();
+    });
+    const end = e => {
+      if (!d || e.pointerId !== d.id) return;
+      const { on, onHandle, v, h } = d, dy = e.clientY - d.y0;
+      d = null;
+      if (!on) { if (onHandle && e.type === 'pointerup' && e.target.closest('.sheet-handle')) toggle(); return; }
+      block = true; setTimeout(() => { block = false; }, 60);
+      if (dy > h / 3 || v > 900) return this.closeSheet(true);
+      if (box.classList.contains('expanded') && (dy > 70 || v > 500)) box.classList.remove('expanded');
+      else if (!box.classList.contains('expanded') && (dy < -40 || v < -600)) box.classList.add('expanded');
+      // vuelve a su sitio con un muelle
+      box.style.transition = 'transform .45s cubic-bezier(.34,1.45,.64,1), min-height .45s cubic-bezier(.05,.7,.1,1), max-height .45s cubic-bezier(.05,.7,.1,1)';
+      box.style.transform = '';
+      sh.style.transition = '--k .3s linear';
+      sh.style.setProperty('--k', 1);
+    };
+    box.addEventListener('pointerup', end);
+    box.addEventListener('pointercancel', end);
+    // que soltar después de arrastrar no cuente como pulsar una opción
+    box.addEventListener('click', e => { if (block) { e.stopPropagation(); e.preventDefault(); } }, true);
+  },
   prompt(title, value, cb, placeholder = '') {
     this.sheet({
       title, body: box => {
