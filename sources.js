@@ -122,7 +122,8 @@ const Sources = (() => {
     App.openView(title, box => {
       box.appendChild(el(`<h1 class="title">${esc(title)}</h1>`));
       const list = initial || [];
-      box.appendChild(App.trackList(list, { from: title, showAlbum: true }));
+      // en una búsqueda, elegir una canción pone su radio detrás (no el resto de resultados)
+      box.appendChild(App.trackList(list, { from: title, showAlbum: true, onClick: q ? (t => App.playWithRadio(t, title)) : undefined }));
       if (!list.length && q) {
         const sp = App.loading(box);
         YTM.search(q, 'songs').then(r => { sp.remove(); box.appendChild(App.trackList(r, { from: title, showAlbum: true })); }).catch(() => { sp.remove(); toast('No se pudo cargar'); });

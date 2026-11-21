@@ -467,6 +467,17 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 .lyrics.syncing p{color:var(--fg2);outline:1px dashed var(--outline-variant);outline-offset:4px;border-radius:12px}
 .lyrics.syncing p:hover{color:var(--primary)}
 
+/* mezclas diarias (reco.js): portada teñida con un color distinto en cada una */
+.card.mix{position:relative}
+.card.mix::before{content:"";position:absolute;z-index:1;left:0;top:0;width:var(--card-w,156px);aspect-ratio:1;border-radius:28px;pointer-events:none;
+  background:linear-gradient(155deg,color-mix(in srgb,var(--mix-c) 75%,transparent) 0%,transparent 62%);transition:border-radius .5s var(--spring)}
+.card.mix:hover::before{border-radius:44px}
+.card.mix::after{content:"Mezcla";position:absolute;z-index:2;left:12px;top:12px;padding:3px 10px;border-radius:10px;font-size:11.5px;font-weight:700;
+  background:var(--mix-c);color:var(--mix-on);letter-spacing:.02em}
+.card.mix-0{--mix-c:var(--primary-container);--mix-on:var(--on-primary-container)}
+.card.mix-1{--mix-c:var(--tertiary-container);--mix-on:var(--on-tertiary-container)}
+.card.mix-2{--mix-c:var(--secondary-container);--mix-on:var(--on-secondary-container)}
+
 /* BPM (bpm.js) */
 .bpm-chip{display:inline-flex;align-items:center;height:28px;margin-top:6px;padding:0 12px;border-radius:14px;font-size:13px;font-weight:600;
   background:var(--secondary-container);color:var(--on-secondary-container);font-variant-numeric:tabular-nums;transition:border-radius .35s var(--spring),opacity .2s}
@@ -827,6 +838,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="sources.js"></script>
 <script src="now.js"></script>
 <script src="bpm.js"></script>
+<script src="reco.js"></script>
 <script src="fx.js"></script>
 </body>
 </html>

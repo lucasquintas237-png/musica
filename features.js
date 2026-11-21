@@ -194,7 +194,7 @@ const Features = (() => {
     if (!t || !t.id) return toast('No se puede crear una radio de esta canción');
     toast('Creando radio…');
     try {
-      const list = (await YTM.radio(t.id)).filter(x => x.id !== t.id);
+      const list = (window.Reco ? await Reco.radioFor(t) : await YTM.radio(t.id)).filter(x => x.id !== t.id);
       if (!list.length) return toast('No se encontraron canciones parecidas');
       const s = App.state;
       if (App.current && App.current.id === t.id) {
@@ -208,8 +208,9 @@ const Features = (() => {
   }
   async function extendRadio(t, playNext) {
     try {
-      const s = App.state, have = new Set(s.queue.map(x => x.id));
-      const list = (await YTM.radio(t.id)).filter(x => !have.has(x.id));
+      const s = App.state, have = new Set(s.queue.map(x => x.id).concat(s.queue.map(x => x.vid)).filter(Boolean));
+      // radio ordenada según tus gustos (sin lo que acabas de oír ni lo que sueles saltar)
+      const list = (window.Reco ? await Reco.radioFor(t, { exclude: have }) : await YTM.radio(t.id)).filter(x => !have.has(x.id));
       if (!list.length) { s.playing = false; App.updatePlaying(); return; }
       s.queue.push(...list);
       App.emit('queue');
@@ -346,7 +347,7 @@ const Features = (() => {
     if (artistFirst) artistsSec();
     if (S.length) {
       res.appendChild(App.section('Canciones', S.length > 5 ? () => Sources.seeAll('Canciones: ' + q, q, S) : null));
-      res.appendChild(App.trackList(S.slice(0, 5), { from: 'Búsqueda: ' + q, showAlbum: true, onClick: (t, i) => App.playList(S, i, 'Búsqueda: ' + q) }));
+      res.appendChild(App.trackList(S.slice(0, 5), { from: 'Búsqueda: ' + q, showAlbum: true, onClick: t => App.playWithRadio(t, 'Búsqueda: ' + q) }));
     }
     if (!artistFirst) artistsSec();
     if (L.length) { res.appendChild(App.section('Álbumes')); res.appendChild(App.shelf(L.slice(0, 12), a => openAlbum(a.browseId, a))); }

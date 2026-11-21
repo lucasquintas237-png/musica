@@ -415,7 +415,15 @@ const Library = {
     if (!t.id) return;
     const s = this.stats();
     const e = s.plays[t.id] || (s.plays[t.id] = { t: clean(t), n: 0, secs: 0 });
-    e.n++; e.t = clean(t);
+    e.n++; e.t = clean(t); e.last = Date.now();
+    store.set('stats', s);
+  },
+  // pasar una canción al poco de empezar cuenta en contra para las recomendaciones
+  countSkip(t) {
+    if (!t || !t.id) return;
+    const s = this.stats();
+    const e = s.plays[t.id] || (s.plays[t.id] = { t: clean(t), n: 0, secs: 0 });
+    e.skips = (e.skips || 0) + 1; e.t = clean(t);
     store.set('stats', s);
   },
   addTime(t, secs) {
@@ -455,6 +463,18 @@ const App = {
     this.saveQueue();
   },
   playNow(t, from = '') { this.playList([t], 0, from); },
+  // suena esa canción y detrás su radio (canciones parecidas), ordenada según tus gustos
+  async playWithRadio(t, from) {
+    this.playList([t], 0, 'Radio de ' + t.title);
+    try {
+      const list = window.Reco ? await Reco.radioFor(t) : (await YTM.radio(t.id)).filter(x => x.id !== t.id);
+      const s = this.state, cur = this.current;
+      if (!cur || (cur.id !== t.id && cur.vid !== t.id)) return;     // ya se cambió de canción
+      const have = new Set(s.queue.map(x => x.id).concat(s.queue.map(x => x.vid)).filter(Boolean));
+      s.queue.push(...list.filter(x => !have.has(x.id)).map(x => ({ ...x })));
+      this.emit('queue'); this.saveQueue();
+    } catch (_) {}
+  },
   playNext(t) {
     const s = this.state;
     if (!this.current) return this.playNow(t);
@@ -506,6 +526,10 @@ const App = {
   next(auto = false) {
     const s = this.state;
     if (!s.queue.length) return;
+    if (!auto && this.current && Player.ready) {
+      const cur = Player.time(), dur = Player.duration() || this.current.dur || 0;
+      if (cur > 1 && cur < Math.min(30, dur * .4 || 30)) Library.countSkip(this.current);
+    }
     if (auto && typeof Features !== 'undefined' && Features.consumeEndOfTrack()) { s.playing = false; this.updatePlaying(); return; }
     if (auto && s.repeat === 'one') { Player.seek(0); Player.play(); return; }
     if (s.index < s.queue.length - 1) { s.index++; return this.start(); }
@@ -894,6 +918,19 @@ const App = {
   closeAllViews() { while (this.views.length) this.closeView(); },
   loading(box) { const s = el('<div class="spinner" role="progressbar" aria-label="Cargando"></div>'); box.appendChild(s); return s; },
 
+  // vista de una mezcla (o de "Para ti"): portada, reproducir / aleatorio y la lista
+  openMix(m) {
+    this.openView(m.title, box => {
+      const h = el(`<div class="hero"><img src="${esc(m.cover || PLACEHOLDER)}" alt=""><div class="meta"><h1>${esc(m.title)}</h1><div class="muted">${esc(m.sub || '')} · ${m.tracks.length} canciones</div><div class="actions"></div></div></div>`);
+      const act = $('.actions', h);
+      const b1 = el(`<button class="btn">${icon('play')}Reproducir</button>`); b1.onclick = () => this.playList(m.tracks, 0, m.title);
+      const b2 = el(`<button class="btn tonal">${icon('shuffle')}Aleatorio</button>`); b2.onclick = () => { this.setShuffle(true); this.playList(m.tracks, 0, m.title); };
+      act.append(b1, b2);
+      box.appendChild(h);
+      box.appendChild(this.trackList(m.tracks, { from: m.title }));
+    });
+  },
+
   /* ---------------- inicio ---------------- */
   renderHome() {
     const tab = $('#tab-home');
@@ -912,21 +949,28 @@ const App = {
     if (hist.length) {
       w.appendChild(this.section('Escuchado recientemente', () => this.openView('Recientes', b => { b.appendChild(el('<h1 class="title">Recientes</h1>')); b.appendChild(this.trackList(hist, { from: 'Recientes' })); })));
       w.appendChild(this.shelf(hist.slice(0, 14).map(t => ({ ...t, sub: t.artist })), t => this.playNow(t, 'Recientes')));
-      // "Para ti": radio a partir de lo último que se escuchó
-      w.appendChild(this.section('Para ti'));
-      const box = el('<div></div>');
-      w.appendChild(box);
-      const seed = hist[0];
-      const show = list => { box.innerHTML = ''; box.appendChild(this.trackList(list.slice(0, 8), { from: 'Para ti' })); };
-      if (this._forYou && this._forYou.seed === seed.id) show(this._forYou.list);
-      else {
-        this.loading(box);
-        YTM.radio(seed.id).then(list => {
-          list = list.filter(t => t.id !== seed.id);
-          this._forYou = { seed: seed.id, list };
-          show(list);
-        }).catch(() => { box.innerHTML = '<div class="empty">No se pudieron cargar sugerencias.</div>'; });
-      }
+      // recomendaciones según tus gustos (reco.js): Para ti, mezclas diarias y "Porque escuchaste"
+      const forBox = el('<div></div>'), mixBox = el('<div></div>'), becBox = el('<div></div>');
+      let forYou = [];
+      w.appendChild(this.section('Para ti', () => forYou.length && this.openMix({ title: 'Para ti', sub: 'Elegidas según lo que escuchas', cover: forYou[0].cover, tracks: forYou })));
+      w.appendChild(forBox); w.appendChild(mixBox); w.appendChild(becBox);
+      this.loading(forBox);
+      (window.Reco ? Reco.home() : Promise.reject()).then(d => {
+        forYou = d.forYou || [];
+        forBox.innerHTML = '';
+        if (forYou.length) forBox.appendChild(this.trackList(forYou.slice(0, 8), { from: 'Para ti', onClick: (t, i) => this.playList(forYou, i, 'Para ti') }));
+        else forBox.appendChild(el('<div class="empty">Escucha algo más de música para recibir recomendaciones.</div>'));
+        if (d.mixes && d.mixes.length) {
+          mixBox.appendChild(this.section('Tus mezclas diarias'));
+          mixBox.appendChild(this.shelf(d.mixes.map(m => ({ ...m, title: m.title, sub: m.sub, cover: m.cover })), m => this.openMix(m)));
+          mixBox.querySelectorAll('.card').forEach((c, i) => c.classList.add('mix', 'mix-' + (i % 3)));
+        }
+        if (d.because) {
+          const b = d.because;
+          becBox.appendChild(this.section('Porque escuchaste «' + b.seed.title + '»'));
+          becBox.appendChild(this.shelf(b.tracks.map(t => ({ ...t, sub: t.artist })), t => this.playWithRadio(t, 'Porque escuchaste ' + b.seed.title)));
+        }
+      }).catch(() => { forBox.innerHTML = '<div class="empty">No se pudieron cargar sugerencias.</div>'; });
     }
 
     w.appendChild(this.section('Tus listas'));
