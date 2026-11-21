@@ -753,9 +753,30 @@ const App = {
         t.albumId && { icon: 'album', label: 'Ir al álbum', fn: () => { this.closePlayer(); Features.openAlbum(t.albumId, { title: t.album }); } },
         opts.playlistId && { icon: 'trash', label: 'Quitar de esta lista', fn: () => { Library.removeFromPlaylist(opts.playlistId, i); opts.onRemove && opts.onRemove(); } },
         opts.inQueue && { icon: 'trash', label: 'Quitar de la cola', fn: () => this.removeFromQueue(i) },
+        t.id && this.canDownload && { icon: 'download', label: 'Descargar canción', fn: () => this.download(t) },
         t.id && { icon: 'link', label: 'Copiar enlace', fn: () => { navigator.clipboard && navigator.clipboard.writeText('https://music.youtube.com/watch?v=' + t.id).then(() => toast('Enlace copiado'), () => toast('No se pudo copiar')); } }
       ]
     });
+  },
+  /* Descargar una canción como archivo de audio (m4a con título, artista y portada).
+     Lo hace yt-dlp en el PC donde corre serve.ps1; en la web de Cloudflare no está disponible. */
+  canDownload: false,
+  async checkDownload() {
+    try { const r = await fetch('/api/dl/ping'); this.canDownload = r.ok && !!(await r.json()).ytdlp; } catch (_) { this.canDownload = false; }
+  },
+  async download(t) {
+    const name = [t.artist, t.title].filter(Boolean).join(' - ') || t.id;
+    toast('Descargando «' + t.title + '»… puede tardar unos segundos', 20000);
+    try {
+      const r = await fetch(`/api/dl/${encodeURIComponent(t.id)}?name=${encodeURIComponent(name)}`);
+      if (!r.ok) throw new Error((await r.text()).replace(/^ERROR:\s*/, '') || 'error ' + r.status);
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement('a');
+      a.href = url; a.download = name.replace(/[\\/:*?"<>|]/g, '') + '.m4a';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      toast('Descargada: ' + name);
+    } catch (e) { toast('No se pudo descargar: ' + e.message, 6000); }
   },
   pickPlaylist(t) {
     const pls = Library.playlists();
@@ -923,6 +944,7 @@ const App = {
     }
 
     this.on('library', () => { if (!$('#tab-home').hidden && !this.views.length) this.renderHome(); });
+    this.checkDownload();
     setInterval(() => this.tick(), 250);
 
     // pestañas (barra Liquid Glass)

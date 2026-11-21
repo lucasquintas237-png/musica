@@ -34,6 +34,14 @@ wrangler.jsonc + worker.js publican la web como Worker con archivos estáticos, 
 mismo intermediario. El nombre del Worker en el panel debe ser "musica" (o cambia "name"
 en wrangler.jsonc para que coincida). .assetsignore deja fuera lo que no es de la web.
 
+Descargar canciones (solo con serve.ps1 en el PC)
+------------------------------------------------
+Menú ⋯ de una canción > "Descargar canción": yt-dlp baja el audio (m4a con título,
+artista y portada) y el navegador lo guarda. Además queda una copia en la carpeta
+descargas\ del proyecto. Necesita yt-dlp, Deno y FFmpeg instalados (winget install
+yt-dlp.yt-dlp DenoLand.Deno yt-dlp.FFmpeg). En la web de Cloudflare no aparece.
+Si deja de funcionar, actualiza yt-dlp:  winget upgrade yt-dlp.yt-dlp
+
 Cuentas de usuario (solo en la versión publicada en Cloudflare)
 --------------------------------------------------------------
 Configuración > Cuenta (o el avatar de Inicio): crear cuenta / iniciar sesión, solo con

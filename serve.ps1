@@ -114,6 +114,53 @@ $worker = {
       return
     }
 
+    # --- Descargas con yt-dlp (solo en este PC) ---
+    # GET /api/dl/ping            -> {"ytdlp":true} si yt-dlp está instalado
+    # GET /api/dl/<id>?name=...   -> descarga el audio (m4a con título, artista y portada) y lo envía como archivo
+    if ($path -eq '/api/dl/ping') {
+      $ok = [bool](Get-Command yt-dlp -ErrorAction SilentlyContinue)
+      Send-Response $stream 200 'application/json; charset=utf-8' ([Text.Encoding]::UTF8.GetBytes((@{ ytdlp = $ok } | ConvertTo-Json -Compress)))
+      return
+    }
+    if ($path -match '^/api/dl/([A-Za-z0-9_-]{11})$') {
+      $id = $Matches[1]
+      $exe = (Get-Command yt-dlp -ErrorAction SilentlyContinue).Source
+      if (-not $exe) { Send-Text $stream 500 'yt-dlp no está instalado'; return }
+      $dir = Join-Path $root 'descargas'
+      if (-not (Test-Path $dir)) { [void](New-Item -ItemType Directory -Path $dir) }
+      $file = Join-Path $dir "$id.m4a"
+      if (-not (Test-Path $file)) {
+        $tpl = Join-Path $dir '%(id)s.%(ext)s'
+        $psi = New-Object Diagnostics.ProcessStartInfo
+        $psi.FileName = $exe
+        $psi.Arguments = "--no-playlist --no-progress -f ""bestaudio[ext=m4a]/bestaudio"" --embed-metadata --embed-thumbnail --convert-thumbnails jpg -o ""$tpl"" ""https://music.youtube.com/watch?v=$id"""
+        $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+        $p = [Diagnostics.Process]::Start($psi)
+        $errTask = $p.StandardError.ReadToEndAsync(); [void]$p.StandardOutput.ReadToEndAsync()
+        if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch {}; Send-Text $stream 500 'La descarga tardó demasiado'; return }
+        if ($p.ExitCode -ne 0 -or -not (Test-Path $file)) {
+          $msg = ($errTask.Result -split "`n" | Where-Object { $_ -match 'ERROR' } | Select-Object -Last 1)
+          if (-not $msg) { $msg = 'yt-dlp no pudo descargar la canción' }
+          Send-Text $stream 500 $msg.Trim(); return
+        }
+      }
+      # nombre del archivo: el que manda la app ("Artista - Título"), sin caracteres no válidos
+      $name = $id
+      foreach ($kv in $query.Split('&')) { if ($kv.StartsWith('name=')) { $name = [Uri]::UnescapeDataString($kv.Substring(5).Replace('+', ' ')) } }
+      $name = ($name -replace '[\\/:*?"<>|\x00-\x1f]', '').Trim()
+      if (-not $name) { $name = $id }
+      if ($name.Length -gt 150) { $name = $name.Substring(0, 150) }
+      $bytes = [IO.File]::ReadAllBytes($file)
+      $enc = [Uri]::EscapeDataString("$name.m4a")
+      $ascii = ($name -replace '[^\x20-\x7e]', '_')
+      $head = "HTTP/1.1 200 OK`r`nContent-Type: audio/mp4`r`nContent-Length: $($bytes.Length)`r`nContent-Disposition: attachment; filename=""$ascii.m4a""; filename*=UTF-8''$enc`r`nCache-Control: no-cache`r`nConnection: close`r`n`r`n"
+      $hb = [Text.Encoding]::ASCII.GetBytes($head)
+      $stream.Write($hb, 0, $hb.Length)
+      $stream.Write($bytes, 0, $bytes.Length)
+      return
+    }
+
     # --- Letras (LRCLIB) ---
     if ($path -match '^/api/lrc/(get|search)$') {
       Proxy $stream 'GET' ("https://lrclib.net/api/" + $Matches[1] + "?" + $query) $null @{ 'Lrclib-Client' = 'MusicaLocal/1.0' } 'max-age=86400'
