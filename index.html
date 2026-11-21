@@ -281,7 +281,9 @@ html:not(.lg) .tb-pill.lifted{background:rgba(255,255,255,.04)}
 .p-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;margin:12px 0}
 .p-cover{width:min(100%, 46vh);aspect-ratio:1;border-radius:32px;object-fit:cover;background:var(--surface-c-high);
   box-shadow:0 24px 60px rgba(0,0,0,.35);transition:transform .7s var(--spring), border-radius .7s var(--spring)}
-#player:not(.playing) .p-cover{transform:scale(.92);border-radius:64px}
+/* pausa: la portada se transforma en la flor de Material 3 Expressive */
+#player .p-cover{border-radius:0;box-shadow:none;clip-path:var(--shape-roundsq);transition:clip-path .7s var(--spring),transform .7s var(--spring)}
+#player:not(.playing) .p-cover{transform:scale(.94);clip-path:var(--shape-flower)}
 .p-panel{position:absolute;inset:0;overflow-y:auto;border-radius:28px;scrollbar-width:none;mask-image:linear-gradient(180deg,transparent,#000 8%,#000 88%,transparent);-webkit-mask-image:linear-gradient(180deg,transparent,#000 8%,#000 88%,transparent)}
 .p-panel::-webkit-scrollbar{display:none}
 .p-info{display:flex;align-items:center;gap:10px;margin-top:6px}

@@ -7,7 +7,7 @@
 const NowPanel = (() => {
   /* ---------------------------------------------------------------- formas M3 Expressive */
   // Todas con el mismo número de puntos para que clip-path pueda transformarse de una a otra.
-  const PTS = 64;
+  const PTS = 96;
   function polygon(rf) {
     const raw = [];
     for (let k = 0; k < PTS; k++) { const a = k / PTS * Math.PI * 2 - Math.PI / 2; raw.push([a, rf(a)]); }
@@ -22,7 +22,10 @@ const NowPanel = (() => {
     sunny: polygon(cookie(8, .05)),
     pentagon: polygon(cookie(5, .11)),
     circle: polygon(() => 1),
-    squircle: polygon(squircle(4))
+    squircle: polygon(squircle(4)),
+    // portada: cuadrado redondeado (sonando) y flor de 8 pétalos (en pausa)
+    roundsq: polygon(squircle(9)),
+    flower: polygon(cookie(8, .11))
   };
   const rs = document.documentElement.style;
   Object.entries(S).forEach(([k, v]) => rs.setProperty('--shape-' + k, v));
