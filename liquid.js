@@ -434,7 +434,8 @@ void main() {
       if (!visible(el)) return;
       const r = el.getBoundingClientRect();
       if (r.width < 1 || r.height < 1 || r.bottom < -50 || r.top > H + 50 || r.right < -50 || r.left > W + 50) return;
-      if (el.hasAttribute('data-glass-dock')) dockTop = Math.min(dockTop, r.top);
+      // solo cuentan las barras de abajo (en PC la de navegación va arriba)
+      if (el.hasAttribute('data-glass-dock') && r.top > H / 2) dockTop = Math.min(dockTop, r.top);
       list.push({ el, r, layer: num(el.dataset.layer, 0) });
     });
     // las barras de abajo marcan dónde se funde el contenido que se desplaza

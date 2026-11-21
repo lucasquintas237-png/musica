@@ -125,7 +125,8 @@ const M3 = (() => {
     // sitio: pegado al botón, por debajo si cabe y si no por encima; sin tapar la barra
     const vw = innerWidth, vh = innerHeight, br = btn.getBoundingClientRect();
     const tb = document.getElementById('tabwrap');
-    const botMax = Math.min(vh - 12, tb ? tb.getBoundingClientRect().top - 8 : vh - 12);
+    const tr = tb && tb.getBoundingClientRect();
+    const botMax = tr && tr.top > vh / 2 ? Math.min(vh - 12, tr.top - 8) : vh - 12;   // en PC la barra va arriba
     const w = box.offsetWidth, h = Math.min(box.scrollHeight, botMax - 12);
     box.style.maxHeight = h + 'px';
     const x = Math.max(12, Math.min(br.right - w, vw - 12 - w));

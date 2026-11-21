@@ -42,7 +42,7 @@ const Glass = (() => {
       widths = items.map(b => b.getBoundingClientRect().width - (o.shrink || 0));
       const r0 = items[0].getBoundingClientRect();
       cy = r0.top - hr.top + r0.height / 2;
-      pillH = o.pillH || r0.height;
+      pillH = typeof o.pillH === 'function' ? o.pillH() : (o.pillH || r0.height);
       return true;
     }
     // el ancho cambia de forma continua entre opciones de distinto ancho
@@ -206,7 +206,7 @@ const Glass = (() => {
     addEventListener('resize', setW);
     const index = Math.max(0, tabItems.findIndex(b => b.dataset.tab === opts.tab));
     tabs = Selector({
-      host: wrap, pill, items: tabItems, index, pillH: 54,
+      host: wrap, pill, items: tabItems, index, pillH: () => wrap.clientHeight - 8,
       onSelect: (i, changed) => onChange && onChange(tabItems[i].dataset.tab, changed)
     });
     wrap.addEventListener('keydown', e => {

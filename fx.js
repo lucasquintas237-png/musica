@@ -165,6 +165,33 @@ const FX = (() => {
     });
   }
 
+  /* ---------------------------------------------------------------- carruseles con flechas (ratón) */
+  function shelves(root) {
+    if (!root.querySelectorAll) return;
+    [...(root.matches && root.matches('.shelf') ? [root] : []), ...root.querySelectorAll('.shelf')].forEach(s => {
+      if (s.parentElement && s.parentElement.classList.contains('shelf-wrap')) return;
+      const w = document.createElement('div');
+      w.className = 'shelf-wrap';
+      s.before(w); w.appendChild(s);
+      const mk = (dir, label, ic) => {
+        const b = document.createElement('button');
+        b.className = 'shelf-arrow ' + dir; b.setAttribute('aria-label', label);
+        b.innerHTML = `<svg class="ic"><use href="#i-${ic}"/></svg>`;
+        b.onclick = () => s.scrollBy({ left: (dir === 'next' ? 1 : -1) * s.clientWidth * .8, behavior: reduced() ? 'auto' : 'smooth' });
+        w.appendChild(b);
+        return b;
+      };
+      const prev = mk('prev', 'Anterior', 'back'), next = mk('next', 'Siguiente', 'back');
+      const upd = () => {
+        prev.classList.toggle('off', s.scrollLeft < 8);
+        next.classList.toggle('off', s.scrollLeft + s.clientWidth > s.scrollWidth - 8);
+      };
+      s.addEventListener('scroll', upd, { passive: true });
+      new ResizeObserver(upd).observe(s);
+      upd();
+    });
+  }
+
   /* ---------------------------------------------------------------- ecualizador en la canción que suena */
   function patchHighlight() {
     const h = App.highlight;
@@ -246,6 +273,7 @@ const FX = (() => {
       if (n.nodeType !== 1) return;
       if (n.tagName === 'IMG') markImg(n); else n.querySelectorAll && n.querySelectorAll('img').forEach(markImg);
       stagger(n.parentElement || n);
+      shelves(n);
     });
   })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
 
@@ -253,6 +281,7 @@ const FX = (() => {
     try { patchViews(); patchHighlight(); App.highlight(); overscroll(); } catch (e) { console.warn('FX:', e); }
     document.querySelectorAll('img').forEach(markImg);
     stagger(document.body);
+    shelves(document.body);
   }, { once: true });
 
   return { buzz };
