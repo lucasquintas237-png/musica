@@ -38,8 +38,9 @@ Cuentas de usuario (solo en la versión publicada en Cloudflare)
 --------------------------------------------------------------
 Configuración > Cuenta (o el avatar de Inicio): crear cuenta / iniciar sesión, solo con
 nombre de usuario y contraseña. Cada cuenta tiene su propio inicio, favoritas, listas,
-historial, estadísticas y búsquedas, sincronizados entre dispositivos. Sin sesión, la app
-funciona como invitado (datos en el navegador). Con serve.ps1 en el PC no hay cuentas.
+historial, estadísticas y búsquedas, sincronizados entre dispositivos. En la web publicada
+hay que iniciar sesión para usarla (pantalla de bienvenida). Con serve.ps1 en el PC no hay
+cuentas y la app se abre directamente como invitado.
 Los datos se guardan en Cloudflare D1 (base de datos gratis "musica-db", declarada en
 wrangler.jsonc; las tablas se crean solas). No hay recuperación de contraseña.
 

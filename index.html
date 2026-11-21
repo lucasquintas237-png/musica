@@ -473,6 +473,23 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 .acct-err{margin:0;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,#ff5449 18%,transparent);color:var(--fg);font-size:14px}
 .acct-note{margin:0;font-size:12.5px;color:var(--fg2)}
 @media (min-width:1000px){ .acct-btn{right:40px;top:14px} }
+/* pantalla de bienvenida (inicio de sesión obligatorio en la web publicada) */
+#auth-gate{position:fixed;inset:0;z-index:40;display:grid;place-items:center;padding:24px 16px calc(24px + var(--safe-b));overflow-y:auto;
+  background:radial-gradient(120% 80% at 50% 0%,var(--primary-container),var(--surface) 70%);animation:fade .3s}
+body.gated #app,body.gated #view,body.gated #now,body.gated #mini,body.gated #tabwrap,body.gated #player{visibility:hidden}
+.gate-card{width:min(420px,100%);padding:28px 24px 20px;border-radius:32px;background:var(--surface-c-low);box-shadow:var(--elev);animation:sheetIn .5s var(--ease-emph)}
+.gate-logo{width:72px;height:72px;margin:0 auto 16px;display:grid;place-items:center;background:var(--primary);color:var(--on-primary);clip-path:var(--shape-cookie9);
+  animation:spin 24s linear infinite}
+.gate-logo .ic{width:34px;height:34px;animation:spin 24s linear infinite reverse}
+.gate-card h1{margin:0 0 6px;text-align:center;font-size:28px;line-height:1.15;font-weight:700;letter-spacing:-.015em;font-variation-settings:"ROND" 100}
+.gate-sub{margin:0 0 20px;text-align:center;color:var(--fg2);font-size:14.5px}
+.gate-tabs{display:flex;gap:3px;margin:0 8px 14px}
+.gate-tabs button{flex:1;height:44px;font-weight:600;font-size:14.5px;background:var(--surface-c-highest);color:var(--fg);border-radius:8px;
+  transition:border-radius .35s var(--spring),background .2s,color .2s}
+.gate-tabs button:first-child{border-radius:22px 8px 8px 22px}
+.gate-tabs button:last-child{border-radius:8px 22px 22px 8px}
+.gate-tabs button.on{background:var(--primary);color:var(--on-primary);border-radius:22px}
+.gate-card .acct-actions .btn{flex:1;justify-content:center}
 
 /* ================================================================== efectos (fx.js) */
 /* colores dinámicos que se funden al cambiar de canción o de tema */

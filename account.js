@@ -3,10 +3,11 @@
    - Cada cuenta tiene sus propios datos en el navegador (favoritas, listas, historial, estadísticas,
      búsquedas, ajustes...) y se sincronizan con el servidor, así el inicio ("Para ti", recientes)
      y el historial de búsqueda son de cada persona y la siguen a cualquier dispositivo.
-   - Sin sesión la app funciona como siempre (invitado). Al crear una cuenta, lo que tenías como
-     invitado pasa a la cuenta nueva.
+   - En la web publicada hay que iniciar sesión para usarla: sin sesión sale una pantalla de
+     bienvenida con "Entrar" y "Crear cuenta". Al crear una cuenta, lo que hubiera guardado en ese
+     navegador como invitado pasa a la cuenta nueva.
    - Las cuentas necesitan el servidor de Cloudflare (base de datos D1). Con serve.ps1 en el PC no
-     hay cuentas y la app sigue en modo invitado. */
+     hay cuentas: no sale la bienvenida y la app funciona en modo invitado. */
 const Account = (() => {
   // mismas claves que acepta el servidor (server/accounts.js)
   const SYNC = ['favs', 'playlists', 'history', 'stats', 'searchHist', 'settings', 'lyrOffsets', 'volume', 'shuffle', 'repeat', 'resolved'];
@@ -88,10 +89,13 @@ const Account = (() => {
     if (!r) { supported = who ? true : null; if (who) user = who; renderAll(); return; }   // sin conexión
     if (r.status === 404 || r.status === 405 || r.status === 501) {
       supported = false;
+      try { localStorage.removeItem('mz:accounts'); } catch (_) {}
+      if (gateEl) { gateEl.remove(); gateEl = null; document.body.classList.remove('gated'); }
       if (who) switchTo('');                // este servidor no tiene cuentas: modo invitado
       renderAll(); return;
     }
     supported = true;
+    try { localStorage.setItem('mz:accounts', '1'); } catch (_) {}
     if (r.ok && r.j && r.j.username) {
       user = r.j.username;
       if (!who || who.toLowerCase() !== user.toLowerCase()) return switchTo(user);
@@ -100,6 +104,7 @@ const Account = (() => {
     } else {
       if (who) { toast('La sesión ha caducado. Vuelve a entrar.'); return switchTo(''); }
       renderAll();
+      showGate('login');                    // sin sesión no se puede usar la app
     }
   }
 
@@ -129,13 +134,10 @@ const Account = (() => {
   /* ---------------------------------------------------------------- interfaz */
   const initial = n => esc((n || '?').trim().charAt(0).toUpperCase());
 
-  function openSheet(mode = 'login') {
+  // formulario de entrar / crear cuenta (lo usan la hoja y la pantalla de bienvenida)
+  function buildForm(mode, onSwitch) {
     const reg = mode === 'register';
-    App.sheet({
-      title: reg ? 'Crear cuenta' : 'Iniciar sesión',
-      sub: 'Solo nombre de usuario y contraseña',
-      body: box => {
-        const f = el(`<form class="acct-form" autocomplete="on">
+    const f = el(`<form class="acct-form" autocomplete="on">
           <label><span>Nombre de usuario</span><input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="24" required></label>
           <label><span>Contraseña</span><input type="password" name="password" autocomplete="${reg ? 'new-password' : 'current-password'}" minlength="${reg ? 6 : 1}" maxlength="200" required></label>
           <p class="acct-err" role="alert" hidden></p>
@@ -145,20 +147,58 @@ const Account = (() => {
           </div>
           ${reg ? '<p class="acct-note">De 3 a 24 caracteres: letras, números, punto, guion o guion bajo. La contraseña, de al menos 6. No hay forma de recuperarla, así que apúntala.</p>' : ''}
         </form>`);
-        const errBox = f.querySelector('.acct-err'), btn = f.querySelector('[type=submit]');
-        f.querySelector('[data-switch]').onclick = () => openSheet(reg ? 'login' : 'register');
-        f.onsubmit = async e => {
-          e.preventDefault();
-          errBox.hidden = true; btn.disabled = true; btn.textContent = reg ? 'Creando…' : 'Entrando…';
-          try { await submit(mode, f.username.value.trim(), f.password.value); }
-          catch (x) {
-            errBox.textContent = x.message; errBox.hidden = false;
-            btn.disabled = false; btn.textContent = reg ? 'Crear cuenta' : 'Entrar';
-          }
-        };
-        box.appendChild(f);
+    const errBox = f.querySelector('.acct-err'), btn = f.querySelector('[type=submit]');
+    f.querySelector('[data-switch]').onclick = () => onSwitch(reg ? 'login' : 'register');
+    f.onsubmit = async e => {
+      e.preventDefault();
+      errBox.hidden = true; btn.disabled = true; btn.textContent = reg ? 'Creando…' : 'Entrando…';
+      try { await submit(mode, f.username.value.trim(), f.password.value); }
+      catch (x) {
+        errBox.textContent = x.message; errBox.hidden = false;
+        btn.disabled = false; btn.textContent = reg ? 'Crear cuenta' : 'Entrar';
       }
+    };
+    return f;
+  }
+
+  function openSheet(mode = 'login') {
+    if (gateEl) return showGate(mode);
+    const reg = mode === 'register';
+    App.sheet({
+      title: reg ? 'Crear cuenta' : 'Iniciar sesión',
+      sub: 'Solo nombre de usuario y contraseña',
+      body: box => box.appendChild(buildForm(mode, openSheet))
     });
+  }
+
+  /* Pantalla de bienvenida: en la web publicada hay que entrar con una cuenta para usar la app.
+     Tapa todo hasta que se inicia sesión (no aparece donde no hay cuentas, como con serve.ps1). */
+  let gateEl = null;
+  function showGate(mode = 'login') {
+    const reg = mode === 'register';
+    if (!gateEl) {
+      gateEl = document.createElement('div');
+      gateEl.id = 'auth-gate';
+      gateEl.setAttribute('role', 'dialog'); gateEl.setAttribute('aria-modal', 'true'); gateEl.setAttribute('aria-labelledby', 'gate-title');
+      document.body.appendChild(gateEl);
+      document.body.classList.add('gated');
+      try { Player.pause(); } catch (_) {}
+    }
+    gateEl.innerHTML = `<div class="gate-card">
+      <div class="gate-logo" aria-hidden="true">${icon('note')}</div>
+      <h1 id="gate-title">${reg ? 'Crea tu cuenta' : 'Te damos la bienvenida'}</h1>
+      <p class="gate-sub">${reg ? 'Solo un nombre de usuario y una contraseña, sin correo.' : 'Inicia sesión para escuchar tu música, con tu propio inicio, favoritas e historial.'}</p>
+      <div class="gate-tabs" role="tablist">
+        <button role="tab" aria-selected="${!reg}" class="${reg ? '' : 'on'}" data-m="login">Entrar</button>
+        <button role="tab" aria-selected="${reg}" class="${reg ? 'on' : ''}" data-m="register">Crear cuenta</button>
+      </div>
+    </div>`;
+    const card = gateEl.querySelector('.gate-card');
+    const f = buildForm(mode, showGate);
+    f.querySelector('[data-switch]').remove();        // aquí se cambia con las pestañas de arriba
+    card.appendChild(f);
+    card.querySelectorAll('.gate-tabs button').forEach(b => b.onclick = () => { if (b.dataset.m !== mode) showGate(b.dataset.m); });
+    setTimeout(() => f.username.focus(), 50);
   }
 
   function accountMenu(origin) {
@@ -218,6 +258,10 @@ const Account = (() => {
     const rh = App.renderHome;
     App.renderHome = function (...a) { const r = rh.apply(this, a); try { decorateHome(); } catch (_) {} return r; };
     decorateHome();
+    // si ya sabemos que este servidor tiene cuentas y no hay sesión, la bienvenida sale al instante
+    let known = false;
+    try { known = localStorage.getItem('mz:accounts') === '1'; } catch (_) {}
+    if (known && !who) showGate('login');
     check();
   }, { once: true });
 
