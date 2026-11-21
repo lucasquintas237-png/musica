@@ -253,6 +253,22 @@ const FX = (() => {
     mini.addEventListener('click', e => { if (block) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
   }
 
+  /* ---------------------------------------------------------------- fondo animado al ritmo */
+  function animatedBackground() {
+    if (!window.Liquid) return;
+    const on = () => store.get('settings', {}).animBg !== false;
+    const sync = () => Liquid.setMotion({ on: on(), playing: !!App.state.playing });
+    App.on('time', ({ cur }) => Liquid.setMotion({ songT: cur, playing: !!App.state.playing, on: on() }));
+    App.on('track', async t => {
+      Liquid.setMotion({ bpm: 0 });
+      if (window.BPM && t) { const r = await BPM.get(t); if (App.current === t && r && r.bpm) Liquid.setMotion({ bpm: r.bpm }); }
+    });
+    const up = App.updatePlaying;
+    App.updatePlaying = function (...a) { const r = up.apply(this, a); sync(); return r; };
+    sync();
+    if (App.current && window.BPM) BPM.get(App.current).then(r => r && r.bpm && Liquid.setMotion({ bpm: r.bpm }));
+  }
+
   /* ---------------------------------------------------------------- arranque */
   registerColors();
   miniSwipe();   // antes que now.js registre su clic en el mini reproductor
@@ -278,7 +294,7 @@ const FX = (() => {
   })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
 
   document.addEventListener('DOMContentLoaded', () => {
-    try { patchViews(); patchHighlight(); App.highlight(); overscroll(); } catch (e) { console.warn('FX:', e); }
+    try { patchViews(); patchHighlight(); App.highlight(); overscroll(); animatedBackground(); } catch (e) { console.warn('FX:', e); }
     document.querySelectorAll('img').forEach(markImg);
     stagger(document.body);
     shelves(document.body);

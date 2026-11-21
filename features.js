@@ -211,12 +211,13 @@ const Features = (() => {
       const s = App.state, have = new Set(s.queue.map(x => x.id).concat(s.queue.map(x => x.vid)).filter(Boolean));
       // radio ordenada según tus gustos (sin lo que acabas de oír ni lo que sueles saltar)
       const list = (window.Reco ? await Reco.radioFor(t, { exclude: have }) : await YTM.radio(t.id)).filter(x => !have.has(x.id));
-      if (!list.length) { s.playing = false; App.updatePlaying(); return; }
-      s.queue.push(...list);
+      // (si se amplía por adelantado, para el fundido, no se para nada aunque falle)
+      if (!list.length) { if (playNext) { s.playing = false; App.updatePlaying(); } return; }
+      s.queue.push(...list.map(x => ({ ...x })));
       App.emit('queue');
       if (playNext) { s.index++; App.start(); }
       App.saveQueue();
-    } catch (_) { App.state.playing = false; App.updatePlaying(); }
+    } catch (_) { if (playNext) { App.state.playing = false; App.updatePlaying(); } }
   }
 
   /* ================================================================ temporizador */
@@ -548,11 +549,14 @@ const Features = (() => {
         <div class="set" style="cursor:default">${icon('theme')}<div class="lbl">Tema</div>
           <div class="seg" id="seg-theme">${[['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Oscuro']].map(([v, l]) => `<button data-v="${v}" class="${theme === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="set" data-k="dynamic">${icon('palette')}<div class="lbl">Color dinámico<small>Fondo y colores tomados de la portada</small></div>${sw(s.dynamic !== false)}</div>
+        <div class="set" data-k="animBg">${icon('radio')}<div class="lbl">Fondo animado al ritmo<small>El color de fondo se mueve y late con el BPM mientras suena música</small></div>${sw(s.animBg !== false)}</div>
         <div class="set" data-k="refraction">${icon('search')}<div class="lbl">Cristal de la barra de navegación<small>${Glass.supported ? 'Cristal líquido con WebGL: refracción, aberración y brillos' : 'Tu navegador no tiene WebGL2; aquí se usa desenfoque'}</small></div>${sw(s.refraction !== false && Glass.supported)}</div>
       </div>
       <h2 class="sec">Reproducción</h2>
       <div class="group">
         <div class="set" data-k="preferAudio">${icon('lyrics')}<div class="lbl">Preferir la versión de audio<small>Si eliges un videoclip, suena su pista de audio oficial: sin intros y con la letra sincronizada</small></div>${sw(s.preferAudio !== false)}</div>
+        <div class="set" style="cursor:default">${icon('queue')}<div class="lbl">Fundido entre canciones<small>La siguiente empieza mientras acaba la actual</small></div>
+          <div class="seg" id="seg-cf">${[[0, 'No'], [3, '3 s'], [6, '6 s'], [10, '10 s']].map(([v, l]) => `<button data-v="${v}" class="${(+s.crossfade || 0) === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="set" data-k="autoRadio">${icon('radio')}<div class="lbl">Seguir con música parecida<small>Al acabar la cola, sigue con una radio</small></div>${sw(s.autoRadio !== false)}</div>
         <div class="set" data-a="timer">${icon('timer')}<div class="lbl">Temporizador de apagado<small>${timer.end ? 'Activo · quedan ' + Math.max(0, Math.round((timer.end - Date.now()) / 60000)) + ' min' : timer.endOfTrack ? 'Al acabar la canción' : 'Desactivado'}</small></div></div>
       </div>
@@ -571,6 +575,12 @@ const Features = (() => {
         <div class="set" style="cursor:default">${icon('info')}<div class="lbl">Música<small>Búsqueda en YouTube Music · letras de LRCLIB · servidor en ${esc(location.host || 'local')}</small></div></div>
       </div>`;
     if (window.Account) Account.renderSlot($('#acct-slot', b));
+    const cfBtns = $$('#seg-cf button', b);
+    cfBtns.forEach(x => x.onclick = () => {
+      setSetting('crossfade', +x.dataset.v);
+      cfBtns.forEach(y => y.classList.toggle('on', y === x));
+      toast(+x.dataset.v ? `Fundido de ${x.dataset.v} s entre canciones` : 'Sin fundido entre canciones');
+    });
     // grupo de botones conectados: solo cambia la selección, sin volver a pintar el bloque
     const segBtns = $$('#seg-theme button', b);
     segBtns.forEach(x => x.onclick = () => {
@@ -611,6 +621,7 @@ const Features = (() => {
 
   return {
     renderSearch, renderSettings, refreshSettings, togglePanel, startRadio, extendRadio, timerMenu, consumeEndOfTrack,
+    endOfTrackPending: () => timer.endOfTrack,
     openArtist, openAlbum, openPlaylist, openFavorites, openStats, exportData, importData, doSearch, applyTheme
   };
 })();

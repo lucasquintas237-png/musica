@@ -467,6 +467,52 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 .lyrics.syncing p{color:var(--fg2);outline:1px dashed var(--outline-variant);outline-offset:4px;border-radius:12px}
 .lyrics.syncing p:hover{color:var(--primary)}
 
+/* "Tu resumen" (wrapped.js) */
+.wr-banner{width:100%;margin:30px 0 4px;display:flex;align-items:center;gap:16px;padding:16px 18px;border-radius:28px;text-align:left;overflow:hidden;position:relative;
+  background:linear-gradient(120deg,var(--primary-container),var(--tertiary-container));color:var(--on-primary-container);transition:border-radius .4s var(--spring),transform .4s var(--spring)}
+.wr-banner:active{border-radius:40px;transform:scale(.98)}
+.wr-banner-shape{width:56px;height:56px;flex:none;background:var(--primary);clip-path:var(--shape-cookie9);animation:spin 18s linear infinite}
+.wr-banner-txt{flex:1;min-width:0}
+.wr-banner b{display:block;font-size:18px;font-variation-settings:"ROND" 100}
+.wr-banner small{display:block;opacity:.8;font-size:13.5px}
+#wrapped{position:fixed;inset:0;z-index:45;display:flex;flex-direction:column;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none;
+  --wc:var(--primary-container);--won:var(--on-primary-container);--wa:var(--primary);
+  background:var(--wc);color:var(--won);transition:background .6s var(--ease),color .6s;animation:fade .3s}
+#wrapped[data-c="1"]{--wc:var(--tertiary-container);--won:var(--on-tertiary-container);--wa:var(--on-tertiary-container)}
+#wrapped[data-c="2"]{--wc:var(--secondary-container);--won:var(--on-secondary-container);--wa:var(--on-secondary-container)}
+#wrapped.out{opacity:0;transition:opacity .3s}
+#wrapped::before,#wrapped::after{content:"";position:absolute;width:70vmax;height:70vmax;background:var(--wa);opacity:.12;pointer-events:none}
+#wrapped::before{right:-25vmax;top:-20vmax;clip-path:var(--shape-cookie9);animation:spin 40s linear infinite}
+#wrapped::after{left:-30vmax;bottom:-30vmax;clip-path:var(--shape-cookie4);animation:spin 55s linear infinite reverse}
+.wr-bars{display:flex;gap:4px;padding:calc(env(safe-area-inset-top,0px) + 12px) 12px 0;position:relative;z-index:2}
+.wr-bars i{flex:1;height:4px;border-radius:2px;background:color-mix(in srgb,var(--won) 25%,transparent);overflow:hidden}
+.wr-bars b{display:block;height:100%;width:0;background:var(--won);border-radius:2px}
+.wr-close{position:absolute;right:10px;top:calc(env(safe-area-inset-top,0px) + 24px);z-index:3;color:var(--won)}
+.wr-stage{flex:1;display:grid;place-items:center;padding:24px;position:relative;z-index:1}
+.wr-slide{width:min(560px,100%);display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;animation:wrIn .6s var(--ease-emph)}
+@keyframes wrIn{from{opacity:0;transform:translateY(30px) scale(.96)}}
+.wr-kicker{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.8}
+.wr-big{font-size:clamp(64px,18vw,140px);line-height:.95;font-weight:800;letter-spacing:-.04em;font-variation-settings:"ROND" 100;font-variant-numeric:tabular-nums}
+.wr-big small{font-size:.35em;letter-spacing:0}
+.wr-big.wr-mid{font-size:clamp(44px,11vw,84px)}
+.wr-sub{margin:0;font-size:18px;opacity:.85;max-width:30ch}
+.wr-title{font-size:clamp(28px,7vw,44px);font-weight:800;line-height:1.05;letter-spacing:-.02em;font-variation-settings:"ROND" 100}
+.wr-more,.wr-streak{margin:6px 0 0;font-size:16px;opacity:.9}
+.wr-cover{width:min(66vw,320px);aspect-ratio:1;object-fit:cover;margin:8px 0;animation:wrCover .9s var(--spring)}
+.wr-cover.flower{clip-path:var(--shape-flower)}
+.wr-cover.cookie{clip-path:var(--shape-cookie9)}
+@keyframes wrCover{from{transform:scale(.6) rotate(-25deg);opacity:0}}
+.wr-list{list-style:none;padding:0;margin:8px 0 0;width:100%;display:flex;flex-direction:column;gap:10px;text-align:left}
+.wr-list li{display:flex;align-items:center;gap:14px;counter-increment:wr;animation:wrIn .5s var(--ease-emph) both;animation-delay:calc(var(--i) * 120ms)}
+.wr-list li::before{content:counter(wr);width:32px;font-size:28px;font-weight:800;text-align:center;flex:none}
+.wr-list img{width:56px;height:56px;border-radius:14px;object-fit:cover;flex:none}
+.wr-list span{min-width:0}.wr-list b{display:block;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wr-list small{display:block;opacity:.8;font-size:14px}
+.wr-beat{width:90px;height:90px;margin-top:20px;background:var(--wa);clip-path:var(--shape-sunny);animation:wrBeat var(--b) ease-out infinite}
+@keyframes wrBeat{0%{transform:scale(1.18)}60%,100%{transform:scale(.9)}}
+.wr-card{width:min(62vw,300px);aspect-ratio:9/16;border-radius:24px;overflow:hidden;box-shadow:var(--elev);background:color-mix(in srgb,var(--won) 10%,transparent)}
+.wr-canvas{width:100%;height:100%;display:block}
+.wr-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+
 /* mezclas diarias (reco.js): portada teñida con un color distinto en cada una */
 .card.mix{position:relative}
 .card.mix::before{content:"";position:absolute;z-index:1;left:0;top:0;width:var(--card-w,156px);aspect-ratio:1;border-radius:28px;pointer-events:none;
@@ -839,6 +885,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="now.js"></script>
 <script src="bpm.js"></script>
 <script src="reco.js"></script>
+<script src="wrapped.js"></script>
 <script src="fx.js"></script>
 </body>
 </html>

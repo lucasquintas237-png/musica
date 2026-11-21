@@ -328,22 +328,41 @@ const YTM = (() => {
 })();
 
 /* ======================================================================= reproductor (YouTube IFrame, oculto) */
+/* Dos reproductores de YouTube ocultos: el "activo" es el que suena y manda; el otro sirve para
+   el fundido entre canciones (crossfade): carga la siguiente en silencio, arranca unos segundos
+   antes de que acabe la actual y los volúmenes se cruzan (curva de potencia constante). */
 const Player = {
-  yt: null, ready: false, pending: null, failed: false,
+  ps: [null, null], ok: [false, false], a: 0,
+  ready: false, pending: null, failed: false, fading: null, vol: 80,
+  get yt() { return this.ps[this.a]; },
   init() {
+    if (!document.getElementById('yt2')) { const d = document.createElement('div'); d.id = 'yt2'; document.getElementById('yt-host').appendChild(d); }
     window.onYouTubeIframeAPIReady = () => {
-      this.yt = new YT.Player('yt', {
-        width: 200, height: 200,
-        playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1, rel: 0, fs: 0, iv_load_policy: 3, origin: location.origin },
-        events: {
-          onReady: () => {
-            this.ready = true;
-            this.setVolume(App.state.volume);
-            if (this.pending) { const p = this.pending; this.pending = null; this.load(p.id, p.start, p.autoplay); }
-          },
-          onStateChange: e => App.onPlayerState(e.data),
-          onError: e => App.onPlayerError(e.data)
-        }
+      ['yt', 'yt2'].forEach((el, k) => {
+        this.ps[k] = new YT.Player(el, {
+          width: 200, height: 200,
+          playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1, rel: 0, fs: 0, iv_load_policy: 3, origin: location.origin },
+          events: {
+            onReady: () => {
+              this.ok[k] = true;
+              if (k === this.a) {
+                this.ready = true;
+                this.setVolume(App.state.volume);
+                if (this.pending) { const p = this.pending; this.pending = null; this.load(p.id, p.start, p.autoplay); }
+              } else this.ps[k].mute();
+            },
+            onStateChange: e => {
+              if (k === this.a) {
+                // la canción que se va termina durante el fundido: se completa el cambio
+                if (this.fading && e.data === 0) return this.finishFade();
+                App.onPlayerState(e.data);
+              } else if (this.fading && k === this.fading.to && e.data === 1 && !this.fading.started) {
+                this.fading.started = true; this.fading.t0 = performance.now();
+              }
+            },
+            onError: e => { if (k === this.a) App.onPlayerError(e.data); else if (this.fading) this.abortFade(); }
+          }
+        });
       });
     };
     const s = document.createElement('script');
@@ -353,16 +372,62 @@ const Player = {
   },
   load(id, start = 0, autoplay = true) {
     if (!this.ready) { this.pending = { id, start, autoplay }; return; }
+    if (this.fading) this.abortFade();
     if (autoplay) this.yt.loadVideoById({ videoId: id, startSeconds: start });
     else this.yt.cueVideoById({ videoId: id, startSeconds: start });
   },
   play() { this.ready && this.yt.playVideo(); },
-  pause() { this.ready && this.yt.pauseVideo(); },
+  pause() { if (!this.ready) return; if (this.fading) this.finishFade(); this.yt.pauseVideo(); },
   stop() { this.ready && this.yt.stopVideo(); },
-  seek(s) { this.ready && this.yt.seekTo(s, true); },
+  seek(s) { if (!this.ready) return; if (this.fading) this.abortFade(); this.yt.seekTo(s, true); },
   time() { return this.ready && this.yt.getCurrentTime ? this.yt.getCurrentTime() || 0 : 0; },
   duration() { return this.ready && this.yt.getDuration ? this.yt.getDuration() || 0 : 0; },
-  setVolume(v) { if (this.ready) { this.yt.setVolume(v); v > 0 ? this.yt.unMute() : this.yt.mute(); } }
+  setVolume(v) {
+    this.vol = v;
+    if (!this.ready) return;
+    if (this.fading) return;                       // durante el fundido manda la curva
+    this.yt.setVolume(v); v > 0 ? this.yt.unMute() : this.yt.mute();
+  },
+
+  /* ---------------- fundido entre canciones ---------------- */
+  canFade() { return this.ready && this.ok[1 - this.a] && !this.fading; },
+  startFade(id, secs, onSwap) {
+    const to = 1 - this.a, nxt = this.ps[to];
+    this.fading = { from: this.a, to, dur: secs * 1000, t0: 0, started: false, onSwap, since: performance.now() };
+    try { nxt.setVolume(0); nxt.unMute(); nxt.loadVideoById({ videoId: id, startSeconds: 0 }); } catch (_) { return this.abortFade(); }
+    clearInterval(this._fi);
+    this._fi = setInterval(() => this.fadeStep(), 50);
+  },
+  fadeStep() {
+    const f = this.fading;
+    if (!f) return clearInterval(this._fi);
+    if (!f.started) { if (performance.now() - f.since > 8000) this.abortFade(); return; }   // no arranca: se cancela
+    const k = Math.min(1, (performance.now() - f.t0) / f.dur), v = this.vol;
+    try {
+      this.ps[f.from].setVolume(Math.round(v * Math.cos(k * Math.PI / 2)));
+      this.ps[f.to].setVolume(Math.round(v * Math.sin(k * Math.PI / 2)));
+      if (v === 0) this.ps[f.to].mute();
+    } catch (_) {}
+    if (k >= 1) this.finishFade();
+  },
+  finishFade() {
+    const f = this.fading;
+    if (!f) return;
+    clearInterval(this._fi);
+    this.fading = null;
+    try { this.ps[f.from].stopVideo(); this.ps[f.from].mute(); } catch (_) {}
+    this.a = f.to;
+    try { this.yt.setVolume(this.vol); this.vol > 0 ? this.yt.unMute() : this.yt.mute(); if (!f.started) this.yt.playVideo(); } catch (_) {}
+    f.onSwap && f.onSwap();
+  },
+  abortFade() {
+    const f = this.fading;
+    if (!f) return;
+    clearInterval(this._fi);
+    this.fading = null;
+    try { this.ps[f.to].stopVideo(); this.ps[f.to].mute(); } catch (_) {}
+    try { this.ps[f.from].setVolume(this.vol); } catch (_) {}
+  }
 };
 
 /* ======================================================================= biblioteca */
@@ -430,9 +495,11 @@ const Library = {
     if (!t || !t.id) return;
     this._acc = (this._acc || 0) + secs;
     if (this._acc < 5) return;             // se guarda cada 5 s para no escribir sin parar
-    const s = this.stats(), day = new Date().toISOString().slice(0, 10);
+    const s = this.stats(), now = new Date(), day = now.toISOString().slice(0, 10);
     const e = s.plays[t.id] || (s.plays[t.id] = { t: clean(t), n: 0, secs: 0 });
     e.secs += this._acc; s.total += this._acc; s.days[day] = (s.days[day] || 0) + this._acc;
+    // a qué horas escuchas (para el resumen)
+    s.hours = s.hours || {}; s.hours[now.getHours()] = (s.hours[now.getHours()] || 0) + this._acc;
     this._acc = 0;
     store.set('stats', s);
   }
@@ -676,9 +743,55 @@ const App = {
       if (!this._counted && cur > Math.min(30, dur / 2)) { this._counted = true; Library.countPlay(t); }
     }
     this.emit('time', { cur, dur });
+    this.crossfadeCheck(cur, dur);
     if ('mediaSession' in navigator && navigator.mediaSession.setPositionState && dur && this.state.playing && (this._ps = (this._ps || 0) + 1) % 8 === 0) {
       try { navigator.mediaSession.setPositionState({ duration: dur, position: Math.min(cur, dur), playbackRate: 1 }); } catch (_) {}
     }
+  },
+
+  /* ---------------- fundido entre canciones (crossfade) ---------------- */
+  // segundos de fundido elegidos en Configuración (0 = sin fundido)
+  get crossfade() { return +(store.get('settings', {}).crossfade || 0); },
+  crossfadeCheck(cur, dur) {
+    const s = this.state, cf = this.crossfade;
+    if (!cf || !s.playing || !dur || Player.fading || s.repeat === 'one') return;
+    if (typeof Features !== 'undefined' && Features.endOfTrackPending && Features.endOfTrackPending()) return;
+    const left = dur - cur;
+    // la cola se acaba y sigue la radio: se amplía antes para poder fundir
+    if (s.index >= s.queue.length - 1 && s.autoRadio && left < cf + 25 && !this._extending && typeof Features !== 'undefined') {
+      this._extending = true;
+      Features.extendRadio(this.current, false).finally(() => { this._extending = false; });
+    }
+    const nx = s.index < s.queue.length - 1 ? s.queue[s.index + 1] : (s.repeat === 'all' ? s.queue[0] : null);
+    if (!nx || !nx.id || dur < cf * 2 + 10) return;
+    // preparar la versión de audio de la siguiente unos segundos antes
+    if (left < cf + 12 && !nx._pre) {
+      nx._pre = true;
+      if (store.get('settings', {}).preferAudio !== false && !nx.vid && !nx.atv) {
+        YTM.audioVersion(nx).then(aid => { if (aid && aid !== nx.id) { nx.vid = nx.id; nx.id = aid; } }).catch(() => {});
+      }
+    }
+    // +1 s: lo que tarda en arrancar el segundo reproductor
+    if (left <= cf + 1 && cur > 5 && Player.canFade()) {
+      const idx = s.index < s.queue.length - 1 ? s.index + 1 : 0;
+      Player.startFade(nx.id, cf, () => this.crossAdvance(idx));
+    }
+  },
+  // la siguiente ya suena: se actualiza todo sin volver a cargarla
+  crossAdvance(idx) {
+    const s = this.state;
+    s.index = idx;
+    const t = this.current;
+    if (!t) return;
+    ++this._tok;
+    this._tries = 0; this._counted = false;
+    s.playing = true;
+    this.updateNow(t);
+    this.updatePlaying();
+    Library.addHistory(t);
+    this.emit('track', t);
+    this.emit('queue');
+    this.saveQueue();
   },
 
   /* ---------------- piezas de interfaz ---------------- */
@@ -971,6 +1084,14 @@ const App = {
           becBox.appendChild(this.shelf(b.tracks.map(t => ({ ...t, sub: t.artist })), t => this.playWithRadio(t, 'Porque escuchaste ' + b.seed.title)));
         }
       }).catch(() => { forBox.innerHTML = '<div class="empty">No se pudieron cargar sugerencias.</div>'; });
+    }
+
+    // acceso a "Tu resumen" (wrapped.js) cuando ya hay datos de escucha
+    if (window.Wrapped && Object.keys(Library.stats().plays || {}).length) {
+      const d = Wrapped.data();
+      const ban = el(`<button class="wr-banner"><span class="wr-banner-shape" aria-hidden="true"></span><span class="wr-banner-txt"><b>Tu resumen musical ${d ? d.year : ''}</b><small>${d ? d.mins.toLocaleString('es-ES') + ' minutos · tu canción, tus artistas y más' : ''}</small></span>${icon('play')}</button>`);
+      ban.onclick = () => Wrapped.open();
+      w.appendChild(ban);
     }
 
     w.appendChild(this.section('Tus listas'));

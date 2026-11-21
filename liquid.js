@@ -30,6 +30,19 @@ const Liquid = (() => {
   let W = 0, H = 0, scale = 1, pixW = 0, pixH = 0;
   let bgTex = null, contentTex = null, fbo = null, fboTex = null, fboW = 0, fboH = 0;
   let dim = 0, force = true, dockPx = -1;
+  // fondo animado: ondula mientras suena música y late con el BPM (time en s, beat 0-1, amount 0-1)
+  const motion = { on: false, playing: false, bpm: 0, songT: 0, at: 0, time: 0, beat: 0, amount: 0, frame: 0 };
+  function updateMotion(now, dt) {
+    const target = motion.on && motion.playing && !reduced.matches ? 1 : 0;
+    motion.amount += (target - motion.amount) * Math.min(1, dt * 1.5);
+    if (motion.amount < .003 && !target) { if (motion.amount) { motion.amount = 0; force = true; } return false; }
+    motion.time += dt;
+    if (motion.bpm && motion.playing) {
+      const ph = (motion.songT + (now - motion.at) / 1000) * motion.bpm / 60;
+      motion.beat = Math.exp(-(ph - Math.floor(ph)) * 5);
+    } else motion.beat *= .9;
+    return true;
+  }
   const A = new Float32Array(MAX * 4), B = new Float32Array(MAX * 4), T = new Float32Array(MAX * 4),
     C = new Float32Array(MAX * 4), K = new Float32Array(MAX * 4);
   let N = 0, hasL1 = false, prevSig = new Float32Array(0);
@@ -42,7 +55,7 @@ void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)
 precision highp float;
 #define MAXS ${MAX}
 uniform vec2 uRes, uLight;
-uniform float uScale, uPixH, uBgTexel, uDark, uBlur, uDim;
+uniform float uScale, uPixH, uBgTexel, uDark, uBlur, uDim, uTime, uBeat, uMotion;
 uniform vec3 uSel;
 uniform sampler2D uBg, uContent, uScene;
 uniform int uPass, uTwo, uN, uHasContent;
@@ -86,10 +99,20 @@ bool nearBody(int i) {
   return false;
 }
 
+// fondo animado: el brillo de la portada ondula despacio y "late" con cada golpe (BPM)
+vec2 bgUV(vec2 uv) {
+  if (uMotion <= 0.) return uv;
+  float a = .022 * uMotion;
+  uv += a * vec2(sin(uTime * .23 + uv.y * 4.1) + .5 * sin(uTime * .11 + uv.x * 7.),
+                 cos(uTime * .19 + uv.x * 3.7) + .5 * cos(uTime * .13 + uv.y * 6.));
+  uv = .5 + (uv - .5) * (1. - .014 * uBeat * uMotion);
+  return clamp(uv, 0., 1.);
+}
+vec3 bgAt(vec2 uv, float lod) { return textureLod(uBg, bgUV(uv), lod).rgb * (1. + .07 * uBeat * uMotion); }
 vec3 src(vec2 q, float lod) {
   vec2 uv = clamp(q / uRes, 0., 1.);
   if (uPass == 1) return textureLod(uScene, vec2(uv.x, 1. - uv.y), lod).rgb;
-  return textureLod(uBg, uv, lod).rgb;
+  return bgAt(uv, lod);
 }
 // desenfoque: nivel de mipmap + 9 muestras alrededor (L en "niveles" de px CSS)
 vec3 blur9(vec2 q, float L) {
@@ -173,7 +196,7 @@ void main() {
   P = vec2(gl_FragCoord.x, uPixH - gl_FragCoord.y) / uScale;
   float cdim = 1. - uDim * .45;
   vec3 col = uPass == 0
-    ? textureLod(uBg, clamp(P / uRes, 0., 1.), 0.).rgb
+    ? bgAt(clamp(P / uRes, 0., 1.), 0.)
     : textureLod(uScene, vec2(P.x / uRes.x, 1. - P.y / uRes.y), 0.).rgb;
   if (uPass == 1 && uHasContent == 1) { vec4 k = texture(uContent, P / uRes) * cdim; col = col * (1. - k.a) + k.rgb; }
   for (int i = 0; i < MAXS; i++) {
@@ -221,7 +244,7 @@ void main() {
     vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
     U = {};
-    ['uRes', 'uLight', 'uScale', 'uPixH', 'uBgTexel', 'uDark', 'uBlur', 'uDim', 'uSel', 'uBg', 'uContent', 'uScene',
+    ['uRes', 'uLight', 'uScale', 'uPixH', 'uBgTexel', 'uDark', 'uBlur', 'uDim', 'uSel', 'uTime', 'uBeat', 'uMotion', 'uBg', 'uContent', 'uScene',
       'uPass', 'uTwo', 'uN', 'uHasContent', 'uA', 'uB', 'uT', 'uC', 'uK'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
     gl.uniform1i(U.uBg, 0); gl.uniform1i(U.uContent, 1); gl.uniform1i(U.uScene, 2);
     bgTex = makeTex(true); contentTex = makeTex(false);
@@ -513,6 +536,9 @@ void main() {
     gl.uniform1f(U.uDark, dark ? 1 : 0);
     gl.uniform1f(U.uBlur, BLUR);
     gl.uniform1f(U.uDim, dim);
+    gl.uniform1f(U.uTime, motion.time);
+    gl.uniform1f(U.uBeat, motion.beat);
+    gl.uniform1f(U.uMotion, motion.amount);
     gl.uniform2f(U.uLight, light.x, light.y);
     gl.uniform3f(U.uSel, SEL[0], SEL[1], SEL[2]);
     gl.uniform1i(U.uN, N);
@@ -560,6 +586,8 @@ void main() {
     const cs = getComputedStyle(root);
     const dark = root.dataset.theme !== 'light';
     updateLight(now, dt);
+    // con el fondo animado se redibuja a 30 fotogramas por segundo
+    if (updateMotion(now, dt) && (++motion.frame & 1) === 0) force = true;
     collect(dark);
     let changed = updateBg(now, cs);
     if (paintContent(cs)) changed = true;
@@ -598,6 +626,8 @@ void main() {
     setBackground,
     setEnabled(on) { enabled = !!on; apply(); },
     setDim(v) { dim = Math.max(0, Math.min(1, v)); },
+    // { on, playing, bpm, songT }: estado del fondo animado
+    setMotion(o) { Object.assign(motion, o); if ('songT' in o) motion.at = performance.now(); },
     refresh() { force = true; },
     get supported() { return supported; },
     get active() { return ok && enabled; },
