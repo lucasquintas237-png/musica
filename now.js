@@ -185,52 +185,97 @@ const NowPanel = (() => {
     }
   }
 
-  /* ---------------------------------------------------------------- anillo ondulado del mini reproductor
+  /* ---------------------------------------------------------------- anillos ondulados de progreso
      Indicador circular ondulado de M3 Expressive: la parte escuchada es una onda que se mueve
-     mientras suena y se aplana al pausar; lo que queda es un arco liso. */
-  function miniRing() {
-    const btn = document.querySelector('#mini [data-act=toggle]');
-    if (!btn) return;
-    const NS = 'http://www.w3.org/2000/svg';
+     mientras suena y se aplana al pausar; lo que queda es un arco liso. Lo usan el mini
+     reproductor y la fila de la canción que suena (recomendaciones, búsqueda, listas).
+     Una sola animación mueve todos los anillos a la vez. Medidas en unidades del viewBox 0-100. */
+  const NS = 'http://www.w3.org/2000/svg';
+  const RING = {
+    mini: { R: 77, AMP: 11.8, N: 9, GAP: .36 },   // botón de 44 px
+    row: { R: 42, AMP: 2.8, N: 12, GAP: .3 }       // alrededor de la portada redonda de la fila
+  };
+  const rings = new Set();
+  const rs2 = { p: 0, amp: 0, phase: 0, raf: 0, last: 0 };
+
+  function makeRing(host, kind, cls) {
     const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('class', 'mini-ring'); svg.setAttribute('viewBox', '0 0 44 44'); svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('class', cls); svg.setAttribute('viewBox', '0 0 100 100'); svg.setAttribute('aria-hidden', 'true');
     svg.innerHTML = '<path class="tr"/><path class="pl"/>';
-    btn.prepend(svg);
-    const tr = svg.querySelector('.tr'), pl = svg.querySelector('.pl');
-    const C = 22, R = 17, N = 9, GAP = .36, AMP = 2.6;   // N ondas en la vuelta; AMP en px
-    let p = 0, amp = 0, phase = 0, raf = 0, last = 0;
-    const pt = (th, r) => (C + r * Math.cos(th)).toFixed(2) + ' ' + (C + r * Math.sin(th)).toFixed(2);
-    function draw(t) {
-      raf = 0;
-      const dt = last ? Math.min(.05, (t - last) / 1000) : 1 / 60; last = t;
-      const playing = !!App.state.playing;
-      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      // con "reducir movimiento" la onda se ve igual, solo que quieta
-      amp = still ? (playing ? AMP : 0) : amp + ((playing ? AMP : 0) - amp) * Math.min(1, dt * 6);
-      if (playing && !still) phase += dt * 4;
-      const s = -Math.PI / 2, e = s + Math.max(0, Math.min(1, p)) * Math.PI * 2;
-      let d = '';
-      const steps = Math.max(2, Math.ceil((e - s) * 30));
-      for (let i = 0; i <= steps; i++) {
-        const th = s + (e - s) * i / steps;
-        // la onda se suaviza en los extremos para que el arco no empiece "a saltos"
-        const edge = Math.min(1, (th - s) / .4, (e - th) / .4 + .3);
-        d += (i ? 'L' : 'M') + pt(th, R + amp * edge * Math.sin(N * th - phase));
-      }
-      pl.setAttribute('d', p > .002 ? d : '');
-      // resto: arco liso con un hueco a cada lado de la parte escuchada
-      const a0 = e + GAP, a1 = s + Math.PI * 2 - GAP;
-      tr.setAttribute('d', a1 > a0 ? `M${pt(a0, R)}A${R} ${R} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(a1, R)}` : '');
-      // (offsetParent no sirve: el mini reproductor es position:fixed y siempre da null)
-      const mini = document.getElementById('mini');
-      const visible = mini.checkVisibility ? mini.checkVisibility() : mini.getClientRects().length > 0;
-      if (visible && !still && (playing || amp > .02)) raf = requestAnimationFrame(draw); else last = 0;
+    host.prepend(svg);
+    rings.add({ svg, cfg: RING[kind], tr: svg.querySelector('.tr'), pl: svg.querySelector('.pl') });
+    kickRings();
+    return svg;
+  }
+
+  function drawRing(r) {
+    const { R, AMP, N, GAP } = r.cfg, amp = AMP * rs2.amp, phase = rs2.phase;
+    const pt = (th, rad) => (50 + rad * Math.cos(th)).toFixed(2) + ' ' + (50 + rad * Math.sin(th)).toFixed(2);
+    const s = -Math.PI / 2, e = s + Math.max(0, Math.min(1, rs2.p)) * Math.PI * 2;
+    let d = '';
+    const steps = Math.max(2, Math.ceil((e - s) * 30));
+    for (let i = 0; i <= steps; i++) {
+      const th = s + (e - s) * i / steps;
+      // la onda se suaviza en los extremos para que el arco no empiece "a saltos"
+      const edge = Math.min(1, (th - s) / .4, (e - th) / .4 + .3);
+      d += (i ? 'L' : 'M') + pt(th, R + amp * edge * Math.sin(N * th - phase));
     }
-    const kick = () => { if (!raf) raf = requestAnimationFrame(draw); };
-    App.on('time', ({ cur, dur }) => { p = dur ? cur / dur : 0; kick(); });
-    App.on('track', () => { p = 0; kick(); });
-    hook('updatePlaying', kick);
-    kick();
+    r.pl.setAttribute('d', rs2.p > .002 ? d : '');
+    // resto: arco liso con un hueco a cada lado de la parte escuchada
+    const a0 = e + GAP, a1 = s + Math.PI * 2 - GAP;
+    r.tr.setAttribute('d', a1 > a0 ? `M${pt(a0, R)}A${R} ${R} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(a1, R)}` : '');
+  }
+
+  // (offsetParent no sirve: el mini reproductor es position:fixed y siempre da null)
+  const shown = el => el.checkVisibility ? el.checkVisibility() : el.getClientRects().length > 0;
+
+  function tickRings(t) {
+    rs2.raf = 0;
+    const dt = rs2.last ? Math.min(.05, (t - rs2.last) / 1000) : 1 / 60; rs2.last = t;
+    const playing = !!App.state.playing;
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // amplitud 0-1 (cada anillo la escala); con "reducir movimiento" la onda se ve, pero quieta
+    rs2.amp = still ? (playing ? 1 : 0) : rs2.amp + ((playing ? 1 : 0) - rs2.amp) * Math.min(1, dt * 6);
+    if (playing && !still) rs2.phase += dt * 4;
+    let any = false;
+    rings.forEach(r => {
+      if (!r.svg.isConnected) { rings.delete(r); return; }
+      if (!shown(r.svg)) return;
+      any = true;
+      drawRing(r);
+    });
+    if (any && !still && (playing || rs2.amp > .02)) rs2.raf = requestAnimationFrame(tickRings); else rs2.last = 0;
+  }
+  function kickRings() { if (!rs2.raf) rs2.raf = requestAnimationFrame(tickRings); }
+
+  // la fila de la canción que suena: ecualizador sobre la portada y anillo alrededor
+  function decorateRow(row) {
+    if (!row.classList.contains('playing') || !row.querySelector('.art')) return;
+    if (!row.querySelector('.eq')) {
+      const eq = document.createElement('span');
+      eq.className = 'eq'; eq.setAttribute('aria-hidden', 'true');
+      eq.innerHTML = '<i></i><i></i><i></i><i></i>';
+      row.querySelector('.art').after(eq);
+    }
+    if (!row.querySelector('.row-ring')) makeRing(row, 'row', 'row-ring');
+  }
+  function decorateRows() {
+    document.querySelectorAll('.row .row-ring').forEach(x => { if (!x.closest('.row.playing')) x.remove(); });
+    document.querySelectorAll('.row.playing').forEach(decorateRow);
+  }
+
+  function initRings() {
+    const btn = document.querySelector('#mini [data-act=toggle]');
+    if (btn) makeRing(btn, 'mini', 'mini-ring');
+    App.on('time', ({ cur, dur }) => { rs2.p = dur ? cur / dur : 0; kickRings(); });
+    App.on('track', () => { rs2.p = 0; kickRings(); });
+    hook('updatePlaying', kickRings);
+    hook('highlight', decorateRows);
+    // filas nuevas (búsquedas, recomendaciones, listas) que ya nacen marcadas como "sonando"
+    const tr = App.trackRow;
+    App.trackRow = function (...a) { const row = tr.apply(this, a); try { decorateRow(row); } catch (_) {} return row; };
+    decorateRows();
+    kickRings();
   }
 
   // engancharse a los métodos de App que ya actualizan el reproductor
@@ -259,7 +304,7 @@ const NowPanel = (() => {
       setMin(false);
     }, true);
     initDrag();
-    miniRing();
+    initRings();
     if (store.get('nowMin', false) && App.current) setMin(true, false);
 
     hook('updateNow', () => { renderTrack(); renderFav(); });
