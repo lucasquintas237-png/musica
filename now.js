@@ -194,14 +194,14 @@ const NowPanel = (() => {
     svg.innerHTML = '<path class="tr"/><path class="pl"/>';
     btn.prepend(svg);
     const tr = svg.querySelector('.tr'), pl = svg.querySelector('.pl');
-    const C = 22, R = 18.5, N = 10, GAP = .32;
+    const C = 22, R = 17, N = 9, GAP = .36, AMP = 2.6;   // N ondas en la vuelta; AMP en px
     let p = 0, amp = 0, phase = 0, raf = 0, last = 0;
     const pt = (th, r) => (C + r * Math.cos(th)).toFixed(2) + ' ' + (C + r * Math.sin(th)).toFixed(2);
     function draw(t) {
       raf = 0;
       const dt = last ? Math.min(.05, (t - last) / 1000) : 0; last = t;
       const playing = !!App.state.playing && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-      amp += ((playing ? 1.5 : 0) - amp) * Math.min(1, dt * 6);
+      amp += ((playing ? AMP : 0) - amp) * Math.min(1, dt * 6);
       if (playing) phase += dt * 4;
       const s = -Math.PI / 2, e = s + Math.max(0, Math.min(1, p)) * Math.PI * 2;
       let d = '';
