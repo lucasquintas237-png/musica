@@ -456,6 +456,24 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 .lyrics.syncing p{color:var(--fg2);outline:1px dashed var(--outline-variant);outline-offset:4px;border-radius:12px}
 .lyrics.syncing p:hover{color:var(--primary)}
 
+/* cuentas (account.js) */
+#tab-home .wrap{position:relative}
+.acct-btn{position:absolute;right:var(--gutter);top:8px;z-index:2;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;
+  background:var(--surface-c-high);color:var(--fg);transition:transform .35s var(--spring)}
+.acct-btn:active{transform:scale(.9)}
+.acct-avatar{width:40px;height:40px;display:grid;place-items:center;flex:none;font-weight:700;font-size:18px;
+  background:var(--primary-container);color:var(--on-primary-container);clip-path:var(--shape-cookie9);font-variation-settings:"ROND" 100}
+.acct-btn .acct-avatar{width:44px;height:44px}
+#tab-home h1.title{padding-right:60px}
+.acct-form{display:flex;flex-direction:column;gap:12px;padding:4px 8px 8px}
+.acct-form label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--fg2)}
+.acct-form input{width:100%;height:56px;border-radius:12px;border:1px solid var(--outline);background:transparent;padding:0 16px;outline:0;font-size:16px;color:var(--fg)}
+.acct-form input:focus{border:2px solid var(--primary);padding:0 15px}
+.acct-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px}
+.acct-err{margin:0;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,#ff5449 18%,transparent);color:var(--fg);font-size:14px}
+.acct-note{margin:0;font-size:12.5px;color:var(--fg2)}
+@media (min-width:1000px){ .acct-btn{right:40px;top:14px} }
+
 /* ================================================================== efectos (fx.js) */
 /* colores dinámicos que se funden al cambiar de canción o de tema */
 :root.fx-colors{transition-property:--primary,--on-primary,--primary-container,--on-primary-container,--secondary-container,--on-secondary-container,
@@ -759,6 +777,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="liquid.js"></script>
 <script src="glass.js"></script>
 <script src="app.js"></script>
+<script src="account.js"></script>
 <script src="features.js"></script>
 <script src="sources.js"></script>
 <script src="now.js"></script>

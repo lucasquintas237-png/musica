@@ -34,6 +34,15 @@ wrangler.jsonc + worker.js publican la web como Worker con archivos estáticos, 
 mismo intermediario. El nombre del Worker en el panel debe ser "musica" (o cambia "name"
 en wrangler.jsonc para que coincida). .assetsignore deja fuera lo que no es de la web.
 
+Cuentas de usuario (solo en la versión publicada en Cloudflare)
+--------------------------------------------------------------
+Configuración > Cuenta (o el avatar de Inicio): crear cuenta / iniciar sesión, solo con
+nombre de usuario y contraseña. Cada cuenta tiene su propio inicio, favoritas, listas,
+historial, estadísticas y búsquedas, sincronizados entre dispositivos. Sin sesión, la app
+funciona como invitado (datos en el navegador). Con serve.ps1 en el PC no hay cuentas.
+Los datos se guardan en Cloudflare D1 (base de datos gratis "musica-db", declarada en
+wrangler.jsonc; las tablas se crean solas). No hay recuperación de contraseña.
+
 Archivos
 --------
 index.html            estructura y estilos
@@ -46,6 +55,8 @@ sources.js            enlaces, listas de Spotify/YouTube Music, errores de repro
 serve.ps1             servidor local + proxys (YouTube Music, LRCLIB, Spotify, portadas)
 functions/api/        los mismos proxys para Cloudflare Pages (web publicada)
 worker.js, wrangler.jsonc, .assetsignore   la misma web como Worker de Cloudflare
+server/accounts.js    cuentas y datos de usuario (Cloudflare D1)
+account.js            inicio de sesión, datos por cuenta y sincronización
 liquid.js, now.js, fx.js   cristal de la barra, panel "Ahora suena", efectos de Android
 sw.js, manifest.webmanifest, icon*.png/svg   app instalable (PWA, solo en localhost)
 

@@ -7,6 +7,7 @@ node_modules
 wrangler.jsonc
 worker.js
 functions
+server
 serve.ps1
 iniciar.bat
 *.log

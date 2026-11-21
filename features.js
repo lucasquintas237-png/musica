@@ -509,7 +509,7 @@ const Features = (() => {
         App.sheet({
           title: 'Importar copia', sub: new Date(j.date).toLocaleString('es'), items: [
             { icon: 'upload', label: 'Combinar con lo que tengo', fn: () => { merge(j.data); location.reload(); } },
-            { icon: 'trash', label: 'Reemplazar todo', fn: () => { store.keys().forEach(k => localStorage.removeItem('mz:' + k)); Object.entries(j.data).forEach(([k, v]) => store.set(k, v)); location.reload(); } }
+            { icon: 'trash', label: 'Reemplazar todo', fn: () => { store.keys().forEach(k => store.remove(k)); Object.entries(j.data).forEach(([k, v]) => store.set(k, v)); location.reload(); } }
           ]
         });
       } catch (e) { toast('No se pudo importar: ' + e.message, 4000); }
@@ -541,6 +541,7 @@ const Features = (() => {
     const theme = s.theme || 'auto';
     const sw = on => `<span class="switch${on ? ' on' : ''}" role="switch" aria-checked="${!!on}"></span>`;
     b.innerHTML = `
+      <div id="acct-slot"></div>
       <h2 class="sec">Apariencia</h2>
       <div class="group">
         <div class="set" style="cursor:default">${icon('theme')}<div class="lbl">Tema</div>
@@ -568,6 +569,7 @@ const Features = (() => {
       <div class="group">
         <div class="set" style="cursor:default">${icon('info')}<div class="lbl">Música<small>Búsqueda en YouTube Music · letras de LRCLIB · servidor en ${esc(location.host || 'local')}</small></div></div>
       </div>`;
+    if (window.Account) Account.renderSlot($('#acct-slot', b));
     // grupo de botones conectados: solo cambia la selección, sin volver a pintar el bloque
     const segBtns = $$('#seg-theme button', b);
     segBtns.forEach(x => x.onclick = () => {

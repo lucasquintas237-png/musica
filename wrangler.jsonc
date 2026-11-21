@@ -9,5 +9,11 @@
     "directory": ".",
     "binding": "ASSETS"
   },
+  // base de datos de las cuentas (Cloudflare D1, gratis). Sin "database_id", wrangler la crea
+  // sola al publicar; si tu versión no lo hace, créala en el panel (Storage & databases > D1)
+  // con el nombre "musica-db" y añade aquí "database_id": "<su id>".
+  "d1_databases": [
+    { "binding": "DB", "database_name": "musica-db" }
+  ],
   "observability": { "enabled": true }
 }

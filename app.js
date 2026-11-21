@@ -12,10 +12,25 @@ const parseDur = t => (t || '').trim().split(':').reduce((a, b) => a * 60 + (+b 
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
 
+/* Datos en el navegador. Cada cuenta tiene su propio espacio ("mz:u:<nombre>:"); sin sesión se
+   usa el de invitado ("mz:"). account.js cambia el espacio y sincroniza con el servidor. */
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('mz:' + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
-  set(k, v) { try { localStorage.setItem('mz:' + k, JSON.stringify(v)); } catch (_) {} },
-  keys() { try { return Object.keys(localStorage).filter(k => k.startsWith('mz:')).map(k => k.slice(3)); } catch (_) { return []; } }
+  ns: 'mz:',
+  onset: null,
+  get(k, d) { try { const v = localStorage.getItem(this.ns + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
+  set(k, v) {
+    try { localStorage.setItem(this.ns + k, JSON.stringify(v)); } catch (_) {}
+    if (this.onset) try { this.onset(k, v); } catch (_) {}
+  },
+  remove(k) { try { localStorage.removeItem(this.ns + k); } catch (_) {} },
+  keys() {
+    try {
+      return Object.keys(localStorage)
+        .filter(k => k.startsWith(this.ns) && !(this.ns === 'mz:' && k.startsWith('mz:u:')))
+        .map(k => k.slice(this.ns.length))
+        .filter(k => k !== 'audioMap' && k !== 'who');
+    } catch (_) { return []; }
+  }
 };
 
 function toast(msg, ms = 2600) {
