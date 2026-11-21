@@ -29,6 +29,11 @@ función de Cloudflare, así que la web funciona sola en los servidores de Cloud
    https://musica-xxx.pages.dev  (sirve en el móvil y en cualquier sitio).
 Cada "git push" a esa rama vuelve a publicar la web automáticamente.
 
+Si Cloudflare lo creó como Worker (el registro dice "npx wrangler deploy"), también vale:
+wrangler.jsonc + worker.js publican la web como Worker con archivos estáticos, usando el
+mismo intermediario. El nombre del Worker en el panel debe ser "musica" (o cambia "name"
+en wrangler.jsonc para que coincida). .assetsignore deja fuera lo que no es de la web.
+
 Archivos
 --------
 index.html            estructura y estilos
@@ -40,6 +45,7 @@ features.js           letras, radio, cola, temporizador, atajos, buscador, artis
 sources.js            enlaces, listas de Spotify/YouTube Music, errores de reproducción
 serve.ps1             servidor local + proxys (YouTube Music, LRCLIB, Spotify, portadas)
 functions/api/        los mismos proxys para Cloudflare Pages (web publicada)
+worker.js, wrangler.jsonc, .assetsignore   la misma web como Worker de Cloudflare
 liquid.js, now.js, fx.js   cristal de la barra, panel "Ahora suena", efectos de Android
 sw.js, manifest.webmanifest, icon*.png/svg   app instalable (PWA, solo en localhost)
 

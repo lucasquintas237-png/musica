@@ -1,0 +1,12 @@
+# Archivos del repositorio que NO se publican como parte de la web (Cloudflare Workers)
+.git
+.gitignore
+.assetsignore
+.wrangler
+node_modules
+wrangler.jsonc
+worker.js
+functions
+serve.ps1
+iniciar.bat
+*.log

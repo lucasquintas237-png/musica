@@ -1,0 +1,13 @@
+// Configuración para publicar la app como Worker de Cloudflare (con archivos estáticos).
+// El nombre debe coincidir con el del Worker creado en el panel de Cloudflare.
+{
+  "name": "musica",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    // la web está en la raíz del repositorio; .assetsignore deja fuera lo que no es de la web
+    "directory": ".",
+    "binding": "ASSETS"
+  },
+  "observability": { "enabled": true }
+}
