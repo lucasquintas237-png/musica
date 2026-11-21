@@ -434,6 +434,18 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 }
 @media (min-width:1400px){:root{--now-w:380px}}
 @media (min-width:900px){ h1.title{font-size:48px} .card,.card img{width:176px}.card img{height:176px} }
+/* ajuste de sincronización de la letra */
+.p-panel.synced{mask-image:linear-gradient(180deg,#000 0,#000 60px,transparent 60px,#000 calc(60px + 8%),#000 88%,transparent);
+  -webkit-mask-image:linear-gradient(180deg,#000 0,#000 60px,transparent 60px,#000 calc(60px + 8%),#000 88%,transparent)}
+.lyr-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;height:56px;padding:0 4px}
+.lyr-bar::-webkit-scrollbar{display:none}
+.lyr-bar .chip{background:var(--surface-c-high);border-color:transparent;color:var(--fg);flex:none}
+.lyr-bar .chip.on{background:var(--primary);color:var(--on-primary)}
+.lyr-bar .chip.on::before{display:none}
+.lyr-off{flex:none;min-width:96px;text-align:center;font-size:13px;font-weight:600;color:var(--fg2);font-variant-numeric:tabular-nums}
+.lyrics.syncing p{color:var(--fg2);outline:1px dashed var(--outline-variant);outline-offset:4px;border-radius:12px}
+.lyrics.syncing p:hover{color:var(--primary)}
+
 /* ================================================================== efectos (fx.js) */
 /* colores dinámicos que se funden al cambiar de canción o de tema */
 :root.fx-colors{transition-property:--primary,--on-primary,--primary-container,--on-primary-container,--secondary-container,--on-secondary-container,

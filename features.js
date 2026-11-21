@@ -52,6 +52,7 @@ const Features = (() => {
     if (!t) return;
     if (lyr.id === t.id && lyr.data !== undefined && panel.querySelector('.lyrics')) return;
     lyr.id = t.id; lyr.cur = -1; lyr.lines = [];
+    panel.classList.remove('synced');
     panel.innerHTML = '<div class="spinner"></div>';
     let data = null;
     try { data = await fetchLyrics(t); } catch (_) {}
@@ -59,11 +60,17 @@ const Features = (() => {
     lyr.data = data;
     if (!data) { panel.innerHTML = '<div class="lyrics plain"><p class="muted">No hay letra disponible para esta canción.</p></div>'; return; }
     const box = el(`<div class="lyrics${data.syncedLyrics ? '' : ' plain'}"></div>`);
+    panel.classList.toggle('synced', !!data.syncedLyrics);
     if (data.syncedLyrics) {
+      lyr.auto = null; lyr.syncMode = false;
       lyr.lines = parseLRC(data.syncedLyrics);
       lyr.lines.forEach(l => {
         const p = el(`<p>${esc(l.text || '♪')}</p>`);
-        p.onclick = () => { Player.seek(l.t); Player.play(); };
+        p.onclick = () => {
+          // modo sincronizar: la línea tocada es la que suena ahora
+          if (lyr.syncMode) { setOffset(Player.time() - l.t); lyr.syncMode = false; updateLyrBar(); toast('Letra ajustada: ' + fmtOff(getOffset())); return; }
+          Player.seek(Math.max(0, l.t + getOffset())); Player.play();
+        };
         box.appendChild(p);
       });
     } else {
@@ -71,17 +78,79 @@ const Features = (() => {
     }
     box.appendChild(el('<p class="src">Letra: LRCLIB</p>'));
     panel.innerHTML = '';
+    if (data.syncedLyrics) {
+      const bar = el(`<div class="lyr-bar">
+        <button class="chip" data-l="-" aria-label="Letra antes">−0,5 s</button>
+        <span class="lyr-off"></span>
+        <button class="chip" data-l="+" aria-label="Letra después">+0,5 s</button>
+        <button class="chip" data-l="sync">Sincronizar</button>
+        <button class="chip" data-l="auto">Auto</button></div>`);
+      bar.onclick = e => {
+        const b = e.target.closest('[data-l]');
+        if (!b) return;
+        const k = b.dataset.l;
+        if (k === '-') setOffset(getOffset() - .5);
+        else if (k === '+') setOffset(getOffset() + .5);
+        else if (k === 'auto') { clearOffset(); toast('Desfase automático: ' + fmtOff(getOffset())); }
+        else { lyr.syncMode = !lyr.syncMode; updateLyrBar(); if (lyr.syncMode) toast('Toca la línea que está sonando ahora', 3500); }
+      };
+      panel.appendChild(bar);
+    }
     panel.appendChild(box);
+    updateLyrBar();
     panel.onscroll = () => { if (!panel._auto) lyr.userScroll = Date.now(); panel._auto = false; };
   }
+  /* Desfase de la letra (s): cuánto más tarde empieza la canción en este vídeo que en la letra.
+     Se guarda por canción; si no hay uno guardado se estima comparando la duración del vídeo
+     con la de la letra (un vídeo bastante más largo suele llevar una intro). */
+  const offsets = () => store.get('lyrOffsets', {});
+  const fmtOff = v => (Math.abs(v) < .05 ? 'sin desfase' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(1).replace('.', ',') + ' s');
+  function getOffset() {
+    const o = offsets()[lyr.id];
+    return o != null ? o : (lyr.auto || 0);
+  }
+  function setOffset(v) {
+    const o = offsets();
+    o[lyr.id] = Math.round(v * 10) / 10;
+    const keys = Object.keys(o);
+    if (keys.length > 800) delete o[keys[0]];
+    store.set('lyrOffsets', o);
+    lyr.cur = -2; updateLyrBar(); syncLyrics(Player.time());
+  }
+  function clearOffset() {
+    const o = offsets(); delete o[lyr.id]; store.set('lyrOffsets', o);
+    lyr.cur = -2; updateLyrBar(); syncLyrics(Player.time());
+  }
+  function estimateAuto() {
+    if (lyr.auto != null || !lyr.data || !lyr.data.duration) return;
+    let vid = '';
+    try { vid = Player.yt.getVideoData().video_id; } catch (_) {}
+    const vd = Player.duration();
+    if (vid !== lyr.id || !(vd > 0)) return;           // aún no se sabe la duración de este vídeo
+    const d = vd - lyr.data.duration;
+    lyr.auto = d > 4 && d < 150 ? Math.round(d * 10) / 10 : 0;
+    updateLyrBar();
+  }
+  function updateLyrBar() {
+    const bar = $('#player .lyr-bar');
+    if (!bar) return;
+    const saved = offsets()[lyr.id] != null;
+    bar.querySelector('.lyr-off').textContent = fmtOff(getOffset()) + (saved ? '' : lyr.auto ? ' (auto)' : '');
+    bar.querySelector('[data-l=sync]').classList.toggle('on', !!lyr.syncMode);
+    bar.querySelector('[data-l=auto]').hidden = !saved;
+    $('#player .lyrics') && $('#player .lyrics').classList.toggle('syncing', !!lyr.syncMode);
+  }
+
   function syncLyrics(cur) {
     const panel = $('#player .p-panel');
     if (panel.hidden || panel.dataset.kind !== 'lyrics' || !lyr.lines.length) return;
+    estimateAuto();
+    cur -= getOffset();
     let i = -1;
     for (let k = 0; k < lyr.lines.length; k++) { if (lyr.lines[k].t <= cur + .25) i = k; else break; }
     if (i === lyr.cur) return;
     const ps = panel.querySelectorAll('.lyrics p');
-    ps[lyr.cur] && ps[lyr.cur].classList.remove('on');
+    panel.querySelectorAll('.lyrics p.on').forEach(p => p.classList.remove('on'));
     lyr.cur = i;
     if (i < 0 || !ps[i]) return;
     ps[i].classList.add('on');
@@ -103,6 +172,7 @@ const Features = (() => {
     box.appendChild(h);
     up.forEach((t, k) => box.appendChild(App.trackRow(t, s.index + 1 + k, s.queue, { inQueue: true, onClick: (_, i) => App.jump(i) })));
     if (!up.length) box.appendChild(el(`<div class="empty">No hay más canciones en la cola.${s.autoRadio ? ' Al terminar seguirá sonando música parecida (radio).' : ''}</div>`));
+    panel.classList.remove('synced');
     panel.innerHTML = '';
     panel.appendChild(box);
   }
