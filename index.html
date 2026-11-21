@@ -434,6 +434,63 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 }
 @media (min-width:1400px){:root{--now-w:380px}}
 @media (min-width:900px){ h1.title{font-size:48px} .card,.card img{width:176px}.card img{height:176px} }
+/* ================================================================== efectos (fx.js) */
+/* colores dinámicos que se funden al cambiar de canción o de tema */
+:root.fx-colors{transition-property:--primary,--on-primary,--primary-container,--on-primary-container,--secondary-container,--on-secondary-container,
+  --tertiary-container,--on-tertiary-container,--surface,--surface-c-low,--surface-c,--surface-c-high,--surface-c-highest,--on-surface,--on-surface-variant,
+  --outline,--outline-variant,--inverse-surface,--inverse-on-surface;transition-duration:.9s;transition-timing-function:cubic-bezier(.2,0,0,1)}
+/* onda al pulsar */
+.rp{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none}
+.rp i{position:absolute;border-radius:50%;background:currentColor;opacity:.14;transform:scale(0);animation:rpIn .6s cubic-bezier(.2,0,0,1) forwards}
+.rp i.out{opacity:0;transition:opacity .45s}
+@keyframes rpIn{to{transform:scale(1)}}
+/* portadas: brillo mientras cargan y aparición con desenfoque */
+img.wait{background:linear-gradient(100deg,var(--surface-c-high) 30%,var(--surface-c-highest) 50%,var(--surface-c-high) 70%) 0 0/250% 100%;animation:shimmer 1.3s linear infinite}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:-150% 0}}
+img.ok{animation:imgIn .55s var(--ease-emph)}
+@keyframes imgIn{from{opacity:0;filter:blur(10px)}}
+/* cambio de pestaña: "fade through" */
+@keyframes tabIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+/* entrada escalonada de listas */
+.list > *,.tiles > *,.shelf > *,.kpis > *{animation:itemIn .55s var(--ease-emph) both;animation-delay:calc(var(--i,0) * 28ms)}
+@keyframes itemIn{from{opacity:0;transform:translateY(14px) scale(.98)}}
+/* barra superior que aparece al desplazar; el título grande se encoge */
+.topbar{position:sticky;top:0;z-index:4;height:0;pointer-events:none}
+.topbar > div{position:absolute;left:0;right:0;top:0;height:calc(env(safe-area-inset-top,0px) + 60px);padding:env(safe-area-inset-top,0px) 24px 0;
+  display:flex;align-items:center;justify-content:center;background:var(--surface-c);box-shadow:0 1px 0 var(--outline-variant);
+  opacity:var(--sc,0);transform:translateY(calc((1 - var(--sc,0)) * -10px))}
+.topbar span{font-size:18px;font-weight:650;max-width:100%;font-variation-settings:"ROND" 100}
+.tab h1.title{opacity:calc(1 - var(--sc,0) * .85);transform:scale(calc(1 - var(--sc,0) * .1));transform-origin:left bottom}
+.view-top{transition:background .3s,box-shadow .3s}
+.view.scrolled .view-top{background:var(--surface-c);box-shadow:var(--elev);border-radius:0 0 28px 28px;margin:-6px calc(-1 * var(--gutter)) 6px;padding:6px var(--gutter)}
+.vt-title{flex:1;min-width:0;font-size:18px;font-weight:650;opacity:var(--sc,0);transform:translateX(calc((1 - var(--sc,0)) * 12px))}
+.view .hero img{transform:scale(calc(1 - var(--sc,0) * .12));opacity:calc(1 - var(--sc,0) * .45);transform-origin:left bottom}
+/* ecualizador sobre la portada de la canción que suena */
+.row{position:relative}
+.row .eq{position:absolute;left:10px;top:50%;width:52px;height:52px;margin-top:-26px;border-radius:26px;display:flex;align-items:flex-end;justify-content:center;gap:3px;
+  padding-bottom:15px;background:rgba(0,0,0,.42);pointer-events:none}
+.now-next .row .eq{left:6px;width:44px;height:44px;margin-top:-22px;border-radius:22px;padding-bottom:12px}
+.row .eq i{width:4px;height:20px;border-radius:2px;background:#fff;transform-origin:50% 100%;transform:scaleY(.3);animation:eq .9s ease-in-out infinite alternate;animation-play-state:paused}
+.row .eq i:nth-child(2){animation-duration:.7s;animation-delay:-.3s}
+.row .eq i:nth-child(3){animation-duration:1.1s;animation-delay:-.5s}
+.row .eq i:nth-child(4){animation-duration:.8s;animation-delay:-.2s}
+.is-playing .row .eq i{animation-play-state:running}
+@keyframes eq{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
+/* formas que giran detrás de la portada mientras suena */
+@keyframes spin{to{transform:rotate(360deg)}}
+.p-stage::before{content:"";position:absolute;width:min(112%,52vh);aspect-ratio:1;background:var(--primary-container);opacity:.55;clip-path:var(--shape-cookie9);
+  animation:spin 40s linear infinite;animation-play-state:paused;transition:opacity .5s}
+.is-playing .p-stage::before{animation-play-state:running}
+.p-stage:has(.p-panel:not([hidden]))::before{opacity:0}
+.p-cover{position:relative;z-index:1}
+.now-art{position:relative;padding:4%}
+.now-art::before{content:"";position:absolute;inset:0;background:var(--primary-container);clip-path:var(--shape-sunny);opacity:.75;
+  animation:spin 50s linear infinite;animation-play-state:paused}
+.is-playing .now-art::before{animation-play-state:running}
+.now-art img{position:relative}
+/* deslizar el mini reproductor */
+#mini > :not(.rp){transform:translateX(var(--sx,0px));opacity:var(--so,1);transition:transform .45s var(--spring),opacity .3s}
+
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -588,5 +645,6 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 <script src="features.js"></script>
 <script src="sources.js"></script>
 <script src="now.js"></script>
+<script src="fx.js"></script>
 </body>
 </html>
