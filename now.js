@@ -192,7 +192,7 @@ const NowPanel = (() => {
      Una sola animación mueve todos los anillos a la vez. Medidas en unidades del viewBox 0-100. */
   const NS = 'http://www.w3.org/2000/svg';
   const RING = {
-    mini: { R: 77, AMP: 11.8, N: 9, GAP: .36 },   // botón de 44 px
+    mini: { R: 38.6, AMP: 5.9, N: 9, GAP: .36 },  // botón de 44 px (radio 17 px, onda 2,6 px)
     row: { R: 42, AMP: 2.8, N: 12, GAP: .3 }       // alrededor de la portada redonda de la fila
   };
   const rings = new Set();
