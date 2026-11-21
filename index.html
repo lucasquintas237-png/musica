@@ -467,6 +467,70 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 .lyrics.syncing p{color:var(--fg2);outline:1px dashed var(--outline-variant);outline-offset:4px;border-radius:12px}
 .lyrics.syncing p:hover{color:var(--primary)}
 
+/* temas: negro puro, alto contraste y tamaño de letra (features.js > applyTheme) */
+/* (los colores de negro puro y alto contraste los pone m3.js al generar la paleta) */
+html.amoled[data-theme="dark"] body{background:#000}
+html.hc{--fg3:color-mix(in srgb,var(--on-surface) 85%,transparent)}
+html.hc .muted,html.hc small{opacity:1}
+html.hc .chip,html.hc .seg button,html.hc .btn-group button{box-shadow:inset 0 0 0 1px var(--outline)}
+html[data-fs="1"] .wrap,html[data-fs="1"] #player .pin,html[data-fs="1"] #sheet .box{zoom:1.12}
+html[data-fs="2"] .wrap,html[data-fs="2"] #player .pin,html[data-fs="2"] #sheet .box{zoom:1.25}
+html[data-fs="1"] .m3-menu .mi,html[data-fs="1"] .m3-menu .head{font-size:1.1em}
+html[data-fs="2"] .m3-menu .mi,html[data-fs="2"] .m3-menu .head{font-size:1.2em}
+
+/* karaoke a pantalla completa (features.js > openKaraoke) */
+#karaoke{position:fixed;inset:0;z-index:44;overflow:hidden;background:var(--surface);color:var(--on-surface);animation:fade .3s;touch-action:none}
+#karaoke.out{opacity:0;transition:opacity .3s}
+.kk-bg{position:absolute;inset:-15%;background:center/cover no-repeat;filter:blur(70px) saturate(1.7);opacity:.6;transform:scale(1.1)}
+#karaoke::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 55%,transparent),color-mix(in srgb,var(--surface) 25%,transparent) 40%,color-mix(in srgb,var(--surface) 75%,transparent));pointer-events:none}
+.kk-top{position:absolute;z-index:3;left:0;right:0;top:0;display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 14px 24px}
+.kk-info{flex:1;min-width:0}.kk-info b{display:block;font-size:17px}.kk-info span{display:block;font-size:14px;opacity:.75}
+.kk-view{position:absolute;inset:0;z-index:2;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,transparent 8%,#000 22%,#000 78%,transparent 95%);mask-image:linear-gradient(180deg,transparent 8%,#000 22%,#000 78%,transparent 95%)}
+.kk-lines{padding:0 max(24px,8vw);max-width:1100px;margin:0 auto;transition:transform .75s var(--ease-emph)}
+.kk-lines p{margin:0 0 .45em;font-size:clamp(30px,6.2vw,68px);line-height:1.12;font-weight:800;letter-spacing:-.02em;font-variation-settings:"ROND" 100;cursor:pointer;
+  color:color-mix(in srgb,var(--on-surface) 32%,transparent);filter:blur(2px);transform:scale(.93);transform-origin:left center;
+  transition:color .4s,filter .5s,transform .6s var(--spring)}
+.kk-lines p.near,.kk-lines p.done{filter:none}
+.kk-lines p.done{color:color-mix(in srgb,var(--on-surface) 45%,transparent)}
+.kk-lines p.on{filter:none;transform:none;color:transparent;
+  background:linear-gradient(90deg,var(--on-surface) calc(var(--k,0%) - 4%),color-mix(in srgb,var(--on-surface) 38%,transparent) calc(var(--k,0%) + 4%));
+  -webkit-background-clip:text;background-clip:text}
+
+/* modo coche (car.js) */
+#car{position:fixed;inset:0;z-index:46;display:flex;flex-direction:column;background:var(--surface);color:var(--on-surface);
+  padding:calc(env(safe-area-inset-top,0px) + 12px) 20px calc(env(safe-area-inset-bottom,0px) + 20px);animation:fade .3s;user-select:none;-webkit-user-select:none}
+#car.out{opacity:0;transition:opacity .3s}
+.car-top{display:flex;align-items:center;gap:14px}
+.car-clock{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;font-variation-settings:"ROND" 100}
+.car-label{flex:1;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--primary)}
+.car-label .ic{width:20px;height:20px}
+.car-close{width:56px;height:56px;background:var(--surface-c-high)}
+.car-main{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;touch-action:none}
+.car-cover{width:min(62vw,46vh,420px);aspect-ratio:1;object-fit:cover;background:var(--surface-c-high);clip-path:var(--shape-flower);transform:scale(.94);
+  transition:clip-path .7s var(--spring),transform .7s var(--spring)}
+#car.playing .car-cover{clip-path:var(--shape-roundsq);transform:none}
+.car-main.swipe-l .car-cover{animation:carL .45s var(--ease-emph)}
+.car-main.swipe-r .car-cover{animation:carR .45s var(--ease-emph)}
+@keyframes carL{0%{transform:translateX(0)}40%{transform:translateX(-30%) rotate(-6deg);opacity:0}41%{transform:translateX(30%) rotate(6deg)}100%{transform:none;opacity:1}}
+@keyframes carR{0%{transform:translateX(0)}40%{transform:translateX(30%) rotate(6deg);opacity:0}41%{transform:translateX(-30%) rotate(-6deg)}100%{transform:none;opacity:1}}
+.car-txt{width:100%;max-width:900px;text-align:center}
+.car-title{font-size:clamp(32px,7vw,64px);font-weight:800;letter-spacing:-.02em;line-height:1.1;font-variation-settings:"ROND" 100}
+.car-artist{font-size:clamp(20px,4vw,32px);color:var(--fg2);margin-top:4px}
+.car-hint{margin:0;font-size:14px;color:var(--fg2)}
+.car-bar{height:8px;border-radius:4px;background:var(--surface-c-highest);margin:10px 0 20px;overflow:hidden}
+.car-bar i{display:block;height:100%;width:0;background:var(--primary);border-radius:4px;transition:width .5s linear}
+.car-ctrl{display:flex;gap:12px;justify-content:center}
+.car-b{flex:1;max-width:240px;height:clamp(90px,14vh,130px);display:grid;place-items:center;border-radius:36px;background:var(--secondary-container);color:var(--on-secondary-container);
+  transition:border-radius .35s var(--spring),transform .2s}
+.car-b:active{border-radius:56px;transform:scale(.95)}
+.car-b .ic{width:48px;height:48px}
+.car-b.car-play{flex:1.3;background:var(--primary);color:var(--on-primary)}
+.car-b.car-play .ic{width:60px;height:60px}
+@media (orientation:landscape) and (max-height:600px){
+  #car{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr auto auto;column-gap:24px}
+  .car-top{grid-column:1/-1}.car-main{grid-row:2/5}.car-bar{grid-column:2;align-self:end}.car-ctrl{grid-column:2}
+}
+
 /* "Tu resumen" (wrapped.js) */
 .wr-banner{width:100%;margin:30px 0 4px;display:flex;align-items:center;gap:16px;padding:16px 18px;border-radius:28px;text-align:left;overflow:hidden;position:relative;
   background:linear-gradient(120deg,var(--primary-container),var(--tertiary-container));color:var(--on-primary-container);transition:border-radius .4s var(--spring),transform .4s var(--spring)}
@@ -540,6 +604,7 @@ body.now-left #now,body.now-right #now{height:calc(100vh - 32px)}
 .bpm-tap.pulse{animation:bpmPulse .25s var(--ease-emph)}
 @keyframes bpmPulse{from{transform:scale(.9) rotate(-8deg)}to{transform:none}}
 .bpm-sheet .acct-actions{width:100%}
+.bpm-sheet .bpm-mix{width:100%;justify-content:center}
 
 /* cuentas (account.js) */
 #tab-home .wrap{position:relative}
@@ -771,6 +836,9 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
   <symbol id="i-theme" viewBox="0 0 24 24"><path d="M12 22a10 10 0 110-20 10 10 0 010 20zm0-2V4a8 8 0 000 16z"/></symbol>
   <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 000 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16a5 5 0 005-5c0-4.42-4.03-8-9-8zm-5.5 9a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3-4a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3 4a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></symbol>
   <symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M20 5H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V7a2 2 0 00-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></symbol>
+  <symbol id="i-full" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M18.92 6.01A1.5 1.5 0 0017.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8a1 1 0 001 1h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1a1 1 0 001-1v-8l-2.08-5.99zM6.5 16a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm11 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM5 11l1.5-4.5h11L19 11H5z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21z"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"/></symbol>
 </svg>
 
@@ -842,6 +910,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
     <div class="p-top">
       <button class="icb" data-act="close" aria-label="Cerrar"><svg class="ic"><use href="#i-down"/></svg></button>
       <div class="from"><span>Reproduciendo</span><b class="ellipsis" id="p-from">—</b></div>
+      <button class="icb" data-car aria-label="Modo coche"><svg class="ic"><use href="#i-car"/></svg></button>
       <button class="icb" data-act="more" aria-label="Más opciones"><svg class="ic"><use href="#i-more"/></svg></button>
     </div>
     <div class="p-stage">
@@ -886,6 +955,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="bpm.js"></script>
 <script src="reco.js"></script>
 <script src="wrapped.js"></script>
+<script src="car.js"></script>
 <script src="fx.js"></script>
 </body>
 </html>

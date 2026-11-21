@@ -85,6 +85,13 @@ const M3 = (() => {
       'inverse-surface': hsl(h, sn, 19), 'inverse-on-surface': hsl(h, sn + 10, 95),
       'shade-top': hsl(h, sn + 20, 98, .7), 'shade-bot': hsl(h, sn + 20, 98, .95)
     };
+    // negro puro (OLED) y alto contraste, por encima de la paleta
+    const opt = typeof store !== 'undefined' ? store.get('settings', {}) : {};
+    if (dark && opt.amoled) Object.assign(v, {
+      'surface': '#000000', 'surface-c-low': '#0b0b0d', 'surface-c': '#111114', 'surface-c-high': '#18181c', 'surface-c-highest': '#222228',
+      'shade-top': 'rgba(0,0,0,.82)', 'shade-bot': 'rgba(0,0,0,.97)'
+    });
+    if (opt.contrast) Object.assign(v, { 'on-surface-variant': v['on-surface'], 'outline-variant': v['outline'] });
     Object.entries(v).forEach(([k, val]) => root.style.setProperty('--' + k, val));
     root.style.setProperty('--bg', v.surface);
     const meta = document.querySelector('meta[name=theme-color]');

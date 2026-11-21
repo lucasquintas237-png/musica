@@ -125,6 +125,40 @@ const BPM = (() => {
   function setManual(t, bpm) { cache[t.id] = { bpm: Math.round(bpm), fuente: 'medido a mano' }; save(); refresh(); }
   function clear(t) { delete cache[t.id]; save(); }
 
+  /* ---------------------------------------------------------------- mezcla por ritmo
+     Canciones con un BPM parecido (o el doble/la mitad, que se bailan igual) sacadas de la radio de
+     la canción y de las de tu historial reciente. Se añaden a la cola según se van encontrando. */
+  let mixing = 0;
+  async function tempoMix(t) {
+    if (!t || !t.id) return;
+    const r = await get(t);
+    if (!r || !r.bpm) { sheet(t); return toast('No se sabe el BPM de esta canción: mídelo tocando al ritmo'); }
+    const target = r.bpm, tok = ++mixing, name = `Ritmo de ${target} BPM`;
+    const ok = b => [b, b * 2, b / 2].some(x => Math.abs(x - target) <= Math.max(4, target * .05));
+    // si ya suena, sigue sonando; si no, empieza
+    const s = App.state;
+    if (App.current && (App.current.id === t.id || App.current.vid === t.id)) { s.queue.splice(s.index + 1); s.from = name; App.emit('queue'); }
+    else App.playList([t], 0, name);
+    toast(`Buscando canciones de unos ${target} BPM…`, 6000);
+    const seeds = [t.vid || t.id, ...Library.history().filter(h => h.id !== t.id).slice(0, 2).map(h => h.id)];
+    const lists = await Promise.all(seeds.map(id => (window.Reco ? Reco.radio(id) : YTM.radio(id)).catch(() => [])));
+    const seen = new Set([t.id, t.vid]), cands = [];
+    for (let k = 0; k < 40; k++) for (const l of lists) { const c = l[k]; if (c && !seen.has(c.id)) { seen.add(c.id); cands.push(c); } }
+    let found = 0, idx = 0;
+    const worker = async () => {
+      while (idx < cands.length && found < 20 && tok === mixing) {
+        const c = cands[idx++];
+        const b = await get(c).catch(() => null);
+        if (tok !== mixing || !b || !b.bpm || !ok(b.bpm)) continue;
+        found++;
+        s.queue.push({ ...c });
+        App.emit('queue'); App.saveQueue();
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    if (tok === mixing) toast(found ? `Mezcla de ritmo: ${found} canciones de unos ${target} BPM` : 'No se encontraron canciones con ese ritmo');
+  }
+
   /* ---------------------------------------------------------------- interfaz */
   const label = r => !r ? '♩ … BPM' : r.bpm ? `♩ ${r.bpm} BPM` : '♩ BPM';
   function chips() { return document.querySelectorAll('.bpm-chip'); }
@@ -154,7 +188,8 @@ const BPM = (() => {
         const el2 = el(`<div class="bpm-sheet">${info}
           <button class="bpm-tap" type="button"><span>Toca al ritmo</span><b>—</b></button>
           <p class="muted bpm-help">Toca el botón (o pulsa la barra espaciadora) siguiendo el pulso unas 8 veces.</p>
-          <div class="acct-actions"><button class="btn tonal" data-x="reset" type="button">Calcular de nuevo</button><button class="btn" data-x="save" type="button" disabled>Guardar</button></div></div>`);
+          <div class="acct-actions"><button class="btn tonal" data-x="reset" type="button">Calcular de nuevo</button><button class="btn" data-x="save" type="button" disabled>Guardar</button></div>
+          ${r && r.bpm ? `<button class="btn tonal bpm-mix" data-x="mix" type="button">${icon('bolt')}Mezcla con este ritmo</button>` : ''}</div>`);
         const tap = el2.querySelector('.bpm-tap'), out = tap.querySelector('b'), saveBtn = el2.querySelector('[data-x=save]');
         let taps = [], measured = 0;
         const hit = e => {
@@ -177,6 +212,8 @@ const BPM = (() => {
         const key = e => { if (e.code === 'Space' && document.body.contains(tap)) { e.stopPropagation(); hit(e); } else if (!document.body.contains(tap)) removeEventListener('keydown', key, true); };
         addEventListener('keydown', key, true);
         saveBtn.onclick = () => { setManual(t, measured); App.closeSheet(); toast(`BPM guardado: ${measured}`); };
+        const mixBtn = el2.querySelector('[data-x=mix]');
+        if (mixBtn) mixBtn.onclick = () => { App.closeSheet(); tempoMix(t); };
         el2.querySelector('[data-x=reset]').onclick = async () => {
           clear(t); App.closeSheet(); toast('Calculando el BPM…');
           await refresh(); sheet(t);
@@ -196,6 +233,6 @@ const BPM = (() => {
     if (App.current) refresh();
   }, { once: true });
 
-  return { get, sheet, analyze, refresh };
+  return { get, sheet, analyze, refresh, tempoMix };
 })();
 window.BPM = BPM;

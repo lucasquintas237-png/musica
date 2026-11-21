@@ -9,9 +9,14 @@ const Features = (() => {
   /* ================================================================ tema */
   const mq = matchMedia('(prefers-color-scheme: dark)');
   function applyTheme() {
-    const t = settings().theme || 'auto';
-    document.documentElement.dataset.theme = t === 'auto' ? (mq.matches ? 'dark' : 'light') : t;
+    const s = settings(), t = s.theme || 'auto', root = document.documentElement;
+    root.dataset.theme = t === 'auto' ? (mq.matches ? 'dark' : 'light') : t;
+    // negro puro (pantallas OLED), alto contraste y tamaño de letra
+    root.classList.toggle('amoled', !!s.amoled);
+    root.classList.toggle('hc', !!s.contrast);
+    root.dataset.fs = String(s.fontSize || 0);
     M3.applyColor();
+    window.Liquid && Liquid.refresh && Liquid.refresh();
   }
   mq.addEventListener && mq.addEventListener('change', applyTheme);
   applyTheme();
@@ -84,7 +89,8 @@ const Features = (() => {
         <span class="lyr-off"></span>
         <button class="chip" data-l="+" aria-label="Letra después">+0,5 s</button>
         <button class="chip" data-l="sync">Sincronizar</button>
-        <button class="chip" data-l="auto">Auto</button></div>`);
+        <button class="chip" data-l="auto">Auto</button>
+        <button class="chip" data-l="karaoke">${icon('full', 'ic" style="width:18px;height:18px')}Karaoke</button></div>`);
       bar.onclick = e => {
         const b = e.target.closest('[data-l]');
         if (!b) return;
@@ -92,6 +98,7 @@ const Features = (() => {
         if (k === '-') setOffset(getOffset() - .5);
         else if (k === '+') setOffset(getOffset() + .5);
         else if (k === 'auto') { clearOffset(); toast('Desfase automático: ' + fmtOff(getOffset())); }
+        else if (k === 'karaoke') openKaraoke();
         else { lyr.syncMode = !lyr.syncMode; updateLyrBar(); if (lyr.syncMode) toast('Toca la línea que está sonando ahora', 3500); }
       };
       panel.appendChild(bar);
@@ -139,6 +146,59 @@ const Features = (() => {
     bar.querySelector('[data-l=sync]').classList.toggle('on', !!lyr.syncMode);
     bar.querySelector('[data-l=auto]').hidden = !saved;
     $('#player .lyrics') && $('#player .lyrics').classList.toggle('syncing', !!lyr.syncMode);
+  }
+
+  /* Karaoke: la letra a pantalla completa. La línea que suena se "rellena" de color según avanza
+     (hasta la línea siguiente); las de alrededor se ven tenues y las lejanas, desenfocadas. */
+  let kk = null;
+  async function openKaraoke() {
+    const t = App.current;
+    if (!t || !lyr.lines.length || lyr.id !== t.id) return toast('Esta canción no tiene letra sincronizada');
+    if (kk) return;
+    const ov = el(`<div id="karaoke" role="dialog" aria-label="Letra a pantalla completa">
+      <div class="kk-bg"></div>
+      <div class="kk-top"><div class="kk-info ellipsis"><b class="ellipsis">${esc(t.title)}</b><span class="ellipsis">${esc(t.artist)}</span></div>
+        <button class="icb kk-close" aria-label="Cerrar">${icon('close')}</button></div>
+      <div class="kk-view"><div class="kk-lines">${lyr.lines.map((l, i) => `<p data-i="${i}">${esc(l.text || '♪')}</p>`).join('')}</div></div></div>`);
+    ov.querySelector('.kk-bg').style.backgroundImage = `url("${String(t.cover || '').replace(/"/g, '%22')}")`;
+    document.body.appendChild(ov);
+    const box = ov.querySelector('.kk-lines'), ps = [...box.children];
+    let cur = -1, raf = 0, wake = null;
+    try { wake = navigator.wakeLock ? await navigator.wakeLock.request('screen') : null; } catch (_) {}
+    const close = () => {
+      if (!kk) return;
+      cancelAnimationFrame(raf); kk = null;
+      ov.classList.add('out'); setTimeout(() => ov.remove(), 300);
+      try { wake && wake.release(); } catch (_) {}
+      removeEventListener('keydown', key, true);
+    };
+    const key = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    addEventListener('keydown', key, true);
+    ov.querySelector('.kk-close').onclick = close;
+    box.addEventListener('click', e => { const p = e.target.closest('p'); if (p) { Player.seek(Math.max(0, lyr.lines[+p.dataset.i].t + getOffset())); Player.play(); } });
+    let y0 = null;
+    ov.addEventListener('pointerdown', e => { y0 = e.clientY; });
+    ov.addEventListener('pointerup', e => { if (y0 != null && e.clientY - y0 > 120) close(); y0 = null; });
+    const frame = () => {
+      if (!kk) return;
+      if (App.current !== t) return close();
+      const now = Player.time() - getOffset();
+      let i = -1;
+      for (let k = 0; k < lyr.lines.length; k++) { if (lyr.lines[k].t <= now + .15) i = k; else break; }
+      if (i !== cur) {
+        cur = i;
+        ps.forEach((p, k) => { p.classList.toggle('on', k === i); p.classList.toggle('done', k < i); p.classList.toggle('near', Math.abs(k - i) <= 2); });
+        const p = ps[Math.max(0, i)];
+        if (p) box.style.transform = `translateY(${Math.round(ov.clientHeight * .4 - p.offsetTop - p.offsetHeight / 2)}px)`;
+      }
+      if (i >= 0) {
+        const a = lyr.lines[i].t, b = (lyr.lines[i + 1] || { t: a + 4 }).t;
+        ps[i].style.setProperty('--k', (Math.max(0, Math.min(1, (now - a) / Math.max(.3, b - a))) * 100).toFixed(1) + '%');
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    kk = { close };
+    raf = requestAnimationFrame(frame);
   }
 
   function syncLyrics(cur) {
@@ -221,37 +281,57 @@ const Features = (() => {
   }
 
   /* ================================================================ temporizador */
-  const timer = { end: 0, endOfTrack: false };
+  // end: hora de parar · endOfTrack: al acabar esta canción · songs: canciones que quedan (incluida la actual)
+  const timer = { end: 0, endOfTrack: false, songs: 0, fading: false };
+  const timerOn = () => !!(timer.end || timer.endOfTrack || timer.songs);
   function timerMenu() {
     const left = timer.end ? Math.max(0, Math.round((timer.end - Date.now()) / 60000)) : 0;
-    const set = (min, eot) => {
-      timer.end = min ? Date.now() + min * 60000 : 0; timer.endOfTrack = !!eot;
+    const set = (min, eot, songs = 0) => {
+      restoreVolume();
+      timer.end = min ? Date.now() + min * 60000 : 0; timer.endOfTrack = !!eot; timer.songs = songs;
       updateTimerUI();
-      toast(min ? `La música se parará en ${min} min` : eot ? 'La música se parará al acabar esta canción' : 'Temporizador desactivado');
+      toast(min ? `La música se parará en ${min} min (bajando poco a poco)` : eot ? 'La música se parará al acabar esta canción' : songs ? `La música se parará tras ${songs} canciones` : 'Temporizador desactivado');
     };
     App.sheet({
-      title: 'Temporizador de apagado', sub: timer.end ? `Quedan ${left} min` : timer.endOfTrack ? 'Al acabar la canción' : 'Desactivado',
+      title: 'Temporizador de apagado',
+      sub: timer.end ? `Quedan ${left} min` : timer.endOfTrack ? 'Al acabar la canción' : timer.songs ? `Quedan ${timer.songs} canciones` : 'Desactivado',
       items: [
         ...[15, 30, 45, 60, 90].map(m => ({ icon: 'timer', label: m + ' minutos', fn: () => set(m) })),
         { icon: 'note', label: 'Al acabar la canción', fn: () => set(0, true) },
-        (timer.end || timer.endOfTrack) && { icon: 'close', label: 'Desactivar', fn: () => set(0, false) }
+        ...[2, 3, 5].map(n => ({ icon: 'queue', label: `Tras ${n} canciones`, fn: () => set(0, false, n) })),
+        timerOn() && { icon: 'close', label: 'Desactivar', fn: () => set(0, false) }
       ]
     });
   }
   function updateTimerUI() {
-    const on = !!(timer.end || timer.endOfTrack);
-    $('#player [data-act=timer]').classList.toggle('on', on);
+    $('#player [data-act=timer]').classList.toggle('on', timerOn());
   }
+  // al final, la música baja poco a poco en vez de cortarse
+  function restoreVolume() { if (timer.fading) { timer.fading = false; Player.setVolume(App.state.volume); } }
+  function fadeTo(k) { timer.fading = true; Player.setVolume(Math.round(App.state.volume * Math.max(0, Math.min(1, k)))); }
+  const lastSong = () => timer.endOfTrack || timer.songs === 1;
   setInterval(() => {
-    if (timer.end && Date.now() >= timer.end) {
-      timer.end = 0; updateTimerUI();
-      Player.pause(); toast('Temporizador: música en pausa');
+    if (timer.end) {
+      const left = (timer.end - Date.now()) / 1000;
+      if (left <= 0) {
+        timer.end = 0; updateTimerUI();
+        Player.pause(); toast('Temporizador: música en pausa');
+        setTimeout(restoreVolume, 600);
+      } else if (left < 30 && App.state.playing) fadeTo(left / 30);
+    } else if (lastSong() && App.state.playing && Player.ready) {
+      const dur = Player.duration(), left = dur - Player.time();
+      if (dur > 20 && left < 12) fadeTo(left / 12);
     }
-  }, 1000);
+  }, 250);
+  // se llama cuando una canción acaba sola: true = parar aquí
   function consumeEndOfTrack() {
-    if (!timer.endOfTrack) return false;
+    if (timer.songs > 0) {
+      timer.songs--;
+      if (timer.songs > 0) { updateTimerUI(); return false; }
+    } else if (!timer.endOfTrack) return false;
     timer.endOfTrack = false; updateTimerUI();
-    toast('Temporizador: fin de la canción');
+    toast('Temporizador: música en pausa');
+    setTimeout(restoreVolume, 600);
     return true;
   }
 
@@ -549,6 +629,10 @@ const Features = (() => {
         <div class="set" style="cursor:default">${icon('theme')}<div class="lbl">Tema</div>
           <div class="seg" id="seg-theme">${[['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Oscuro']].map(([v, l]) => `<button data-v="${v}" class="${theme === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="set" data-k="dynamic">${icon('palette')}<div class="lbl">Color dinámico<small>Fondo y colores tomados de la portada</small></div>${sw(s.dynamic !== false)}</div>
+        <div class="set" data-t="amoled">${icon('theme')}<div class="lbl">Negro puro<small>Fondo totalmente negro en modo oscuro: ahorra batería en pantallas OLED</small></div>${sw(!!s.amoled)}</div>
+        <div class="set" data-t="contrast">${icon('info')}<div class="lbl">Alto contraste<small>Textos secundarios y bordes más marcados</small></div>${sw(!!s.contrast)}</div>
+        <div class="set" style="cursor:default">${icon('keyboard')}<div class="lbl">Tamaño de letra</div>
+          <div class="seg" id="seg-fs">${[[0, 'Normal'], [1, 'Grande'], [2, 'Muy grande']].map(([v, l]) => `<button data-v="${v}" class="${(+s.fontSize || 0) === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="set" data-k="animBg">${icon('radio')}<div class="lbl">Fondo animado al ritmo<small>El color de fondo se mueve y late con el BPM mientras suena música</small></div>${sw(s.animBg !== false)}</div>
         <div class="set" data-k="refraction">${icon('search')}<div class="lbl">Cristal de la barra de navegación<small>${Glass.supported ? 'Cristal líquido con WebGL: refracción, aberración y brillos' : 'Tu navegador no tiene WebGL2; aquí se usa desenfoque'}</small></div>${sw(s.refraction !== false && Glass.supported)}</div>
       </div>
@@ -558,7 +642,7 @@ const Features = (() => {
         <div class="set" style="cursor:default">${icon('queue')}<div class="lbl">Fundido entre canciones<small>La siguiente empieza mientras acaba la actual</small></div>
           <div class="seg" id="seg-cf">${[[0, 'No'], [3, '3 s'], [6, '6 s'], [10, '10 s']].map(([v, l]) => `<button data-v="${v}" class="${(+s.crossfade || 0) === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="set" data-k="autoRadio">${icon('radio')}<div class="lbl">Seguir con música parecida<small>Al acabar la cola, sigue con una radio</small></div>${sw(s.autoRadio !== false)}</div>
-        <div class="set" data-a="timer">${icon('timer')}<div class="lbl">Temporizador de apagado<small>${timer.end ? 'Activo · quedan ' + Math.max(0, Math.round((timer.end - Date.now()) / 60000)) + ' min' : timer.endOfTrack ? 'Al acabar la canción' : 'Desactivado'}</small></div></div>
+        <div class="set" data-a="timer">${icon('timer')}<div class="lbl">Temporizador de apagado<small>${timer.end ? 'Activo · quedan ' + Math.max(0, Math.round((timer.end - Date.now()) / 60000)) + ' min' : timer.endOfTrack ? 'Al acabar la canción' : timer.songs ? `Quedan ${timer.songs} canciones` : 'Desactivado'}</small></div></div>
       </div>
       <h2 class="sec">Biblioteca</h2>
       <div class="group">
@@ -575,6 +659,10 @@ const Features = (() => {
         <div class="set" style="cursor:default">${icon('info')}<div class="lbl">Música<small>Búsqueda en YouTube Music · letras de LRCLIB · servidor en ${esc(location.host || 'local')}</small></div></div>
       </div>`;
     if (window.Account) Account.renderSlot($('#acct-slot', b));
+    // interruptores que por defecto están apagados
+    $$('.set[data-t]', b).forEach(x => x.onclick = () => { const k = x.dataset.t; setSetting(k, !settings()[k]); applyTheme(); refreshSettings(); });
+    const fsBtns = $$('#seg-fs button', b);
+    fsBtns.forEach(x => x.onclick = () => { setSetting('fontSize', +x.dataset.v); applyTheme(); fsBtns.forEach(y => y.classList.toggle('on', y === x)); });
     const cfBtns = $$('#seg-cf button', b);
     cfBtns.forEach(x => x.onclick = () => {
       setSetting('crossfade', +x.dataset.v);
@@ -621,7 +709,8 @@ const Features = (() => {
 
   return {
     renderSearch, renderSettings, refreshSettings, togglePanel, startRadio, extendRadio, timerMenu, consumeEndOfTrack,
-    endOfTrackPending: () => timer.endOfTrack,
+    endOfTrackPending: () => timer.endOfTrack || timer.songs === 1,
+    openKaraoke,
     openArtist, openAlbum, openPlaylist, openFavorites, openStats, exportData, importData, doSearch, applyTheme
   };
 })();

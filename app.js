@@ -785,6 +785,8 @@ const App = {
     if (!t) return;
     ++this._tok;
     this._tries = 0; this._counted = false;
+    // la anterior ha acabado: cuenta para "parar tras X canciones"
+    if (typeof Features !== 'undefined') Features.consumeEndOfTrack();
     s.playing = true;
     this.updateNow(t);
     this.updatePlaying();
@@ -961,6 +963,7 @@ const App = {
         opts.playlistId && { icon: 'trash', label: 'Quitar de esta lista', fn: () => { Library.removeFromPlaylist(opts.playlistId, i); opts.onRemove && opts.onRemove(); } },
         opts.inQueue && { icon: 'trash', label: 'Quitar de la cola', fn: () => this.removeFromQueue(i) },
         t.id && window.BPM && { icon: 'chart', label: 'BPM de la canción', fn: () => BPM.sheet(t) },
+        t.id && window.BPM && { icon: 'bolt', label: 'Mezcla con su ritmo', fn: () => BPM.tempoMix(t) },
         t.id && this.canDownload && { icon: 'download', label: 'Descargar canción', fn: () => this.download(t) },
         t.id && { icon: 'link', label: 'Copiar enlace', fn: () => { navigator.clipboard && navigator.clipboard.writeText('https://music.youtube.com/watch?v=' + t.id).then(() => toast('Enlace copiado'), () => toast('No se pudo copiar')); } }
       ]
