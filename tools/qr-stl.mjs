@@ -10,7 +10,9 @@
 //   --ecc M           corrección de errores: L, M, Q o H (por defecto M)
 //   --salida qr       nombre base de los archivos (por defecto "qr")
 // Crea:
-//   <salida>-una-pieza.stl  RECOMENDADO: placa y relieve fundidos en un único cuerpo cerrado; no se
+//   <salida>-color.3mf      a color: placa BLANCA y QR NEGRO como dos partes de un mismo objeto
+//                           (se imprimen pegadas; un solo cambio de filamento)
+//   <salida>-una-pieza.stl  sin colores: placa y relieve fundidos en un único cuerpo cerrado; no se
 //                           desmonta. Para dos colores basta UN cambio de filamento a la altura de la placa.
 //   <salida>-base.stl       solo la placa (para impresoras multicolor, como pieza aparte)
 //   <salida>-codigo.stl     solo los cuadritos (piezas sueltas: no imprimir solo)
@@ -275,6 +277,82 @@ function stlTris(tris) {
   return buf;
 }
 
+/* ============================================================ 3MF con colores
+   Un objeto con dos partes: la placa (blanca) y el QR en relieve (negro). Cada parte es una malla
+   cerrada; el relieve se apoya sobre la placa, así que se imprime pegado a ella, y la impresora
+   solo cambia de filamento una vez (abajo solo hay placa y arriba solo QR). */
+
+// malla cerrada de una región de celdas (máscara) entre z0 y z1, con vértices indexados
+export function regionMesh(mask, cell, z0, z1) {
+  const rows = mask.length, cols = mask[0].length, verts = [], index = new Map(), tris = [];
+  const v = (x, y, z) => {
+    const k = `${x},${y},${z}`;
+    if (!index.has(k)) { index.set(k, verts.length); verts.push([x * cell, y * cell, z]); }
+    return index.get(k);
+  };
+  const quad = (a, b, c, d) => { tris.push([a, b, c], [a, c, d]); };
+  const on = (i, j) => i >= 0 && j >= 0 && i < cols && j < rows && mask[j][i];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    if (!mask[j][i]) continue;
+    quad(v(i, j, z1), v(i + 1, j, z1), v(i + 1, j + 1, z1), v(i, j + 1, z1));                 // arriba
+    quad(v(i, j, z0), v(i, j + 1, z0), v(i + 1, j + 1, z0), v(i + 1, j, z0));                 // abajo
+    if (!on(i + 1, j)) quad(v(i + 1, j, z0), v(i + 1, j + 1, z0), v(i + 1, j + 1, z1), v(i + 1, j, z1));   // +x
+    if (!on(i - 1, j)) quad(v(i, j + 1, z0), v(i, j, z0), v(i, j, z1), v(i, j + 1, z1));                   // -x
+    if (!on(i, j + 1)) quad(v(i + 1, j + 1, z0), v(i, j + 1, z0), v(i, j + 1, z1), v(i + 1, j + 1, z1));   // +y
+    if (!on(i, j - 1)) quad(v(i, j, z0), v(i + 1, j, z0), v(i + 1, j, z1), v(i, j, z1));                   // -y
+  }
+  return { verts, tris };
+}
+
+// ZIP sin compresión (lo justo para un 3MF)
+function crc32(b) {
+  let c = ~0;
+  for (let i = 0; i < b.length; i++) { c ^= b[i]; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)); }
+  return ~c >>> 0;
+}
+export function zip(files) {
+  const parts = [], central = [];
+  let off = 0;
+  for (const [name, text] of files) {
+    const data = Buffer.from(text, 'utf8'), nm = Buffer.from(name, 'utf8'), crc = crc32(data);
+    const h = Buffer.alloc(30);
+    h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(0x0800, 6); h.writeUInt16LE(0, 8);
+    h.writeUInt32LE(0, 10); h.writeUInt32LE(crc, 14); h.writeUInt32LE(data.length, 18); h.writeUInt32LE(data.length, 22);
+    h.writeUInt16LE(nm.length, 26); h.writeUInt16LE(0, 28);
+    const c = Buffer.alloc(46);
+    c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(20, 4); c.writeUInt16LE(20, 6); c.writeUInt16LE(0x0800, 8); c.writeUInt16LE(0, 10);
+    c.writeUInt32LE(0, 12); c.writeUInt32LE(crc, 16); c.writeUInt32LE(data.length, 20); c.writeUInt32LE(data.length, 24);
+    c.writeUInt16LE(nm.length, 28); c.writeUInt32LE(off, 42);
+    parts.push(h, nm, data); central.push(c, nm);
+    off += 30 + nm.length + data.length;
+  }
+  const cd = Buffer.concat(central), end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(off, 16);
+  return Buffer.concat([...parts, cd, end]);
+}
+
+export function make3MF(parts, name) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const meshXml = m => '<mesh><vertices>' + m.verts.map(p => `<vertex x="${+p[0].toFixed(4)}" y="${+p[1].toFixed(4)}" z="${+p[2].toFixed(4)}"/>`).join('') +
+    '</vertices><triangles>' + m.tris.map(t => `<triangle v1="${t[0]}" v2="${t[1]}" v3="${t[2]}"/>`).join('') + '</triangles></mesh>';
+  const mats = parts.map(p => `<base name="${esc(p.material)}" displaycolor="${p.color}"/>`).join('');
+  const objs = parts.map((p, k) => `<object id="${k + 2}" name="${esc(p.name)}" type="model" pid="1" pindex="${k}">${meshXml(p.mesh)}</object>`).join('');
+  const comps = parts.map((_, k) => `<component objectid="${k + 2}"/>`).join('');
+  const top = parts.length + 2;
+  const model = `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="es-ES" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+<metadata name="Title">${esc(name)}</metadata>
+<resources><basematerials id="1">${mats}</basematerials>${objs}<object id="${top}" name="${esc(name)}" type="model"><components>${comps}</components></object></resources>
+<build><item objectid="${top}"/></build>
+</model>`;
+  return zip([
+    ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>'],
+    ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>'],
+    ['3D/3dmodel.model', model]
+  ]);
+}
+
 /* ============================================================ programa */
 function args(argv) {
   const o = { ancho: 80, base: 2, relieve: 1, margen: 2, ecc: 'M', salida: 'qr', texto: '' };
@@ -315,11 +393,17 @@ if (isMain && process.argv.length > 2) {
   writeFileSync(o.salida + '-base.stl', stlBoxes(base));
   writeFileSync(o.salida + '-codigo.stl', stlBoxes(code));
   writeFileSync(o.salida + '-una-pieza.stl', stlTris(heightmapTris(H, m, o.base)));
+  // 3MF a color: placa blanca + QR negro (un objeto, dos partes)
+  const all = H.map(r => r.map(() => true)), dark = H.map(r => r.map(h => h > o.base));
+  writeFileSync(o.salida + '-color.3mf', make3MF([
+    { name: 'Placa (blanco)', material: 'Blanco', color: '#FFFFFF', mesh: regionMesh(all, m, 0, o.base) },
+    { name: 'QR (negro)', material: 'Negro', color: '#111111', mesh: regionMesh(dark, m, o.base, o.base + o.relieve) }
+  ], 'Código QR'));
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" width="600" height="600" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/>`;
   qr.modules.forEach((row, y) => row.forEach((d, x) => { if (d) svg += `<rect x="${x + o.margen}" y="${y + o.margen}" width="1" height="1"/>`; }));
   writeFileSync(o.salida + '-vista.svg', svg + '</svg>');
   console.log(`QR versión ${qr.version} (${qr.size}×${qr.size} módulos), corrección ${qr.ecl}, máscara ${qr.mask}`);
   console.log(`Placa ${o.ancho}×${o.ancho}×${o.base} mm, módulo de ${m.toFixed(2)} mm, relieve ${o.relieve} mm (${code.length} piezas unidas)`);
-  console.log(`Archivos: ${o.salida}-una-pieza.stl (recomendado), ${o.salida}-base.stl, ${o.salida}-codigo.stl, ${o.salida}-vista.svg`);
+  console.log(`Archivos: ${o.salida}-color.3mf (placa blanca + QR negro), ${o.salida}-una-pieza.stl, ${o.salida}-base.stl, ${o.salida}-codigo.stl, ${o.salida}-vista.svg`);
   console.log(`Para dos colores con una sola pieza: un único cambio de filamento a ${o.base} mm de altura.`);
 }
