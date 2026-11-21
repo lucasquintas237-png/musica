@@ -101,7 +101,7 @@ $worker = {
     if ($qi -ge 0) { $path = $target.Substring(0, $qi); $query = $target.Substring($qi + 1) }
     $path = [Uri]::UnescapeDataString($path)
 
-    [Console]::WriteLine("{0}  {1} {2}" -f (Get-Date -Format 'HH:mm:ss'), $method, $target)
+    [Console]::WriteLine(("{0}  {1} {2}" -f (Get-Date -Format 'HH:mm:ss'), $method, $target))
 
     # --- YouTube Music (API interna youtubei: search, next, browse) ---
     if ($path -match '^/api/ytm/(search|next|browse|player|music/get_search_suggestions)$') {
