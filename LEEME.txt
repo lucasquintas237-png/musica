@@ -1,0 +1,28 @@
+MÚSICA - reproductor web con YouTube Music
+==========================================
+
+Arrancar
+--------
+1. Doble clic en iniciar.bat  (o: powershell -ExecutionPolicy Bypass -File serve.ps1)
+2. Se abre http://localhost:5500 en el navegador.
+
+Desde el móvil u otro aparato de la misma red
+---------------------------------------------
+Abre http://NOMBRE-DEL-PC.local:5500 (el servidor muestra la dirección exacta al arrancar).
+NUNCA por IP (http://192.168...): YouTube da el error 150 y salta las canciones.
+La primera vez, Windows puede preguntar por el cortafuegos: permite "Redes privadas".
+
+Archivos
+--------
+index.html            estructura y estilos
+glass.js              barra Liquid Glass (píldora, lente, refracción, muelles)
+m3.js                 color dinámico, fondo de tres capas, barra de progreso ondulada
+app.js                reproductor, cola, biblioteca, pantalla de inicio
+features.js           letras, radio, cola, temporizador, atajos, buscador, artista/álbum,
+                      estadísticas, exportar/importar, tema
+sources.js            enlaces, listas de Spotify/YouTube Music, errores de reproducción
+serve.ps1             servidor local + proxys (YouTube Music, LRCLIB, Spotify, portadas)
+sw.js, manifest.webmanifest, icon*.png/svg   app instalable (PWA, solo en localhost)
+
+Tus datos (favoritas, listas, historial) se guardan en el navegador.
+Usa Configuración > Exportar datos para hacer una copia.
