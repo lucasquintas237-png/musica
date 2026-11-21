@@ -33,7 +33,8 @@ const NowPanel = (() => {
   /* ---------------------------------------------------------------- panel */
   const $n = id => document.getElementById(id);
   let wave = null;
-  const wide = matchMedia('(min-width: 1000px)');
+  // mismo límite que en el CSS (#now se muestra desde 760 px); si no coinciden, la onda se queda plana
+  const wide = matchMedia('(min-width: 760px)');
 
   function renderTrack() {
     const t = App.current;
