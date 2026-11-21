@@ -217,6 +217,22 @@ body.in-view #app{visibility:hidden}
 .switch.on::after{top:4px;left:4px;width:24px;height:24px;background:var(--on-primary);transform:translateX(20px)}
 .set:active .switch::after{top:2px;left:2px;width:28px;height:28px}
 kbd{font:12px/1 ui-monospace,Menlo,Consolas,monospace;padding:4px 7px;border-radius:8px;background:var(--surface-c-highest)}
+/* API: tokens y documentación */
+.api-intro{color:var(--fg2);font-size:14.5px;line-height:1.5;margin:4px 0 16px}
+.api-code{position:relative;margin:8px 0 14px;padding:14px 52px 14px 16px;border-radius:18px;background:var(--surface-c-highest);font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.api-code .copy{position:absolute;top:6px;right:6px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--surface-c);color:var(--fg)}
+.api-code .copy .ic{width:18px;height:18px}
+.api-new{padding:14px 16px;border-radius:22px;background:var(--primary-container);color:var(--on-primary-container);margin:0 0 14px}
+.api-new b{display:block;margin-bottom:4px}
+.api-new .api-code{background:var(--surface-c);color:var(--fg);margin-bottom:6px}
+.api-ep{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;padding:10px 18px;background:var(--surface-c)}
+.api-ep:first-child{border-radius:22px 22px 6px 6px}.api-ep:last-child{border-radius:6px 6px 22px 22px}
+.api-ep code{font:12.5px/1.45 ui-monospace,Menlo,Consolas,monospace;color:var(--primary);overflow-wrap:anywhere}
+.api-ep span{font-size:13.5px;color:var(--fg2)}
+.api-tok .del{margin-left:auto;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--fg2)}
+.api-tok .del:hover{background:var(--surface-c-highest);color:var(--error, #b3261e)}
+.api-form{display:flex;flex-direction:column;gap:10px}
+.api-form .seg{margin-left:0}
 .keys{display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:center;padding:18px;font-size:14px}
 
 /* deslizador M3 Expressive: pista gruesa con hueco alrededor del asa */
@@ -868,6 +884,8 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
   <symbol id="i-radio" viewBox="0 0 24 24"><path d="M7.76 16.24A5.98 5.98 0 016 12c0-1.66.67-3.16 1.76-4.24l1.42 1.42A3.96 3.96 0 008 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41zm8.48 0A5.98 5.98 0 0018 12c0-1.66-.67-3.16-1.76-4.24l-1.42 1.42C15.55 9.9 16 10.9 16 12s-.45 2.1-1.17 2.83l1.41 1.41zM12 10a2 2 0 100 4 2 2 0 000-4zm8 2a7.97 7.97 0 01-2.35 5.65l1.42 1.42A9.97 9.97 0 0022 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42A7.97 7.97 0 0120 12zM6.35 6.35L4.93 4.93A9.97 9.97 0 002 12c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A7.97 7.97 0 014 12c0-2.21.9-4.21 2.35-5.65z"/></symbol>
   <symbol id="i-timer" viewBox="0 0 24 24"><path d="M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61l1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42A8.96 8.96 0 0012 4a9 9 0 109 9c0-2.12-.74-4.07-1.97-5.61zM12 20a7 7 0 110-14 7 7 0 010 14z"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
   <symbol id="i-vol" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></symbol>
@@ -1009,6 +1027,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="share.js"></script>
 <script src="welcome.js"></script>
 <script src="together.js"></script>
+<script src="remote.js"></script>
 <script src="fx.js"></script>
 </body>
 </html>

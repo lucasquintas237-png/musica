@@ -57,7 +57,25 @@ const Account = (() => {
     clearTimeout(timers.get(k)); timers.delete(k);
     const v = raw(store.ns, k);
     if (v == null || !user) return;
-    try { await api('PUT', 'data/' + k, v, keepalive && v.length < 60000); } catch (_) { pending.add(k); }
+    try { const r = await api('PUT', 'data/' + k, v, keepalive && v.length < 60000); if (r.j && r.j.updated) ownUp[k] = r.j.updated; } catch (_) { pending.add(k); }
+  }
+  const ownUp = {};
+  /* datos que cambiaron fuera de este dispositivo (otra app o la API): se traen esas claves,
+     salvo las que tengan cambios sin subir aquí */
+  async function pullKeys(changed) {
+    const keys = changed.filter(c => SYNC.includes(c.key) && ownUp[c.key] !== c.updated && !pending.has(c.key)).map(c => c.key);
+    if (!keys.length || !user) return false;
+    const r = await api('GET', 'data');
+    if (!r.ok || !r.j) return false;
+    let changedAny = false;
+    keys.forEach(k => {
+      if (!(k in (r.j.data || {}))) return;
+      const v = JSON.stringify(r.j.data[k]);
+      if (raw(store.ns, k) !== v) { rawSet(store.ns, k, v); changedAny = true; }
+      ownUp[k] = (r.j.updated || {})[k];
+    });
+    if (changedAny) { refreshUI(); try { App.emit('library'); } catch (_) {} }
+    return changedAny;
   }
   function schedule(k) {
     if (!user || !SYNC.includes(k)) return;
@@ -282,7 +300,7 @@ const Account = (() => {
   }, { once: true });
 
   return {
-    renderSlot, openSheet, logout,
+    renderSlot, openSheet, logout, pullKeys,
     get user() { return user; },
     get supported() { return supported; }
   };

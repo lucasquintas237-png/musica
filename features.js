@@ -708,6 +708,8 @@ const Features = (() => {
         <div class="set" data-a="import">${icon('upload')}<div class="lbl">Importar datos<small>Desde una copia exportada</small></div></div>
         <div class="set" data-a="clear-hist">${icon('trash')}<div class="lbl">Borrar historial de escucha</div></div>
       </div>
+      ${window.Remote && window.Account && Account.user ? `<h2 class="sec">Para desarrolladores</h2>
+      <div class="group"><div class="set" data-a="api">${icon('key')}<div class="lbl">API<small>Tokens personales para usar tu música desde otros programas</small></div></div></div>` : ''}
       <h2 class="sec">Atajos de teclado</h2>
       <div class="group"><div class="keys">${SHORTCUTS.map(([k, d]) => `<span>${k.split(' / ').map(x => `<kbd>${esc(x)}</kbd>`).join(' / ')}</span><span class="muted">${esc(d)}</span>`).join('')}</div></div>
       <h2 class="sec">Acerca de</h2>
@@ -742,7 +744,7 @@ const Features = (() => {
     });
     $$('.set[data-a]', b).forEach(x => x.onclick = () => ({
       timer: () => timerMenu(), 'import-link': () => Sources.importPrompt(), artists: () => window.Welcome && Welcome.open(), stats: () => openStats(),
-      export: () => exportData(), import: () => importData(),
+      export: () => exportData(), import: () => importData(), api: () => Remote.open(),
       'clear-hist': () => App.sheet({ title: '¿Borrar el historial?', sub: 'Las estadísticas también se reinician', items: [{ icon: 'trash', label: 'Borrar', fn: () => { store.set('history', []); store.set('stats', { plays: {}, days: {}, total: 0 }); toast('Historial borrado'); } }] })
     }[x.dataset.a])());
   }
