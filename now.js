@@ -199,10 +199,12 @@ const NowPanel = (() => {
     const pt = (th, r) => (C + r * Math.cos(th)).toFixed(2) + ' ' + (C + r * Math.sin(th)).toFixed(2);
     function draw(t) {
       raf = 0;
-      const dt = last ? Math.min(.05, (t - last) / 1000) : 0; last = t;
-      const playing = !!App.state.playing && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-      amp += ((playing ? AMP : 0) - amp) * Math.min(1, dt * 6);
-      if (playing) phase += dt * 4;
+      const dt = last ? Math.min(.05, (t - last) / 1000) : 1 / 60; last = t;
+      const playing = !!App.state.playing;
+      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      // con "reducir movimiento" la onda se ve igual, solo que quieta
+      amp = still ? (playing ? AMP : 0) : amp + ((playing ? AMP : 0) - amp) * Math.min(1, dt * 6);
+      if (playing && !still) phase += dt * 4;
       const s = -Math.PI / 2, e = s + Math.max(0, Math.min(1, p)) * Math.PI * 2;
       let d = '';
       const steps = Math.max(2, Math.ceil((e - s) * 30));
@@ -216,8 +218,10 @@ const NowPanel = (() => {
       // resto: arco liso con un hueco a cada lado de la parte escuchada
       const a0 = e + GAP, a1 = s + Math.PI * 2 - GAP;
       tr.setAttribute('d', a1 > a0 ? `M${pt(a0, R)}A${R} ${R} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(a1, R)}` : '');
-      const visible = document.getElementById('mini').offsetParent !== null;
-      if (visible && (playing || amp > .02)) raf = requestAnimationFrame(draw); else last = 0;
+      // (offsetParent no sirve: el mini reproductor es position:fixed y siempre da null)
+      const mini = document.getElementById('mini');
+      const visible = mini.checkVisibility ? mini.checkVisibility() : mini.getClientRects().length > 0;
+      if (visible && !still && (playing || amp > .02)) raf = requestAnimationFrame(draw); else last = 0;
     }
     const kick = () => { if (!raf) raf = requestAnimationFrame(draw); };
     App.on('time', ({ cur, dur }) => { p = dur ? cur / dur : 0; kick(); });
