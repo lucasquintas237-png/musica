@@ -236,9 +236,11 @@ input[type=range]::-moz-range-thumb{width:4px;height:40px;border:0;border-radius
 #mini .t{font-weight:600;font-size:14.5px}#mini .s{font-size:13px;color:var(--fg2)}
 #mini .b{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;position:relative}
 #mini .b .ic{width:26px;height:26px;position:relative}
-/* anillo de progreso alrededor de reproducir/pausar */
-#mini [data-act=toggle]{background:conic-gradient(var(--primary) calc(var(--p,0) * 1turn),var(--outline-variant) 0)}
-#mini [data-act=toggle]::before{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--surface-c-high)}
+/* anillo de progreso ondulado alrededor de reproducir/pausar (now.js) */
+.mini-ring{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.mini-ring path{fill:none;stroke-width:3;stroke-linecap:round}
+.mini-ring .tr{stroke:var(--outline-variant)}
+.mini-ring .pl{stroke:var(--primary)}
 #mini .bar{display:none}
 
 /* ------------------------------------------------------------------ Liquid Glass: solo la barra de navegación */

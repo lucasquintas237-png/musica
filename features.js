@@ -550,6 +550,7 @@ const Features = (() => {
       </div>
       <h2 class="sec">Reproducción</h2>
       <div class="group">
+        <div class="set" data-k="preferAudio">${icon('lyrics')}<div class="lbl">Preferir la versión de audio<small>Si eliges un videoclip, suena su pista de audio oficial: sin intros y con la letra sincronizada</small></div>${sw(s.preferAudio !== false)}</div>
         <div class="set" data-k="autoRadio">${icon('radio')}<div class="lbl">Seguir con música parecida<small>Al acabar la cola, sigue con una radio</small></div>${sw(s.autoRadio !== false)}</div>
         <div class="set" data-a="timer">${icon('timer')}<div class="lbl">Temporizador de apagado<small>${timer.end ? 'Activo · quedan ' + Math.max(0, Math.round((timer.end - Date.now()) / 60000)) + ' min' : timer.endOfTrack ? 'Al acabar la canción' : 'Desactivado'}</small></div></div>
       </div>

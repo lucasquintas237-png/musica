@@ -176,10 +176,14 @@ const YTM = (() => {
     return {
       kind: 'song', id: v.videoId, title: txt(v.title), artist: m.artist || txt(v.shortBylineText), artistId: m.artistId,
       album: m.album, albumId: m.albumId, dur: parseDur(txt(v.lengthText)), cover: cover(thumb(v.thumbnail)),
-      video: mvt && mvt !== 'MUSIC_VIDEO_TYPE_ATV'
+      video: mvt && mvt !== 'MUSIC_VIDEO_TYPE_ATV', mvt
     };
   }
-  const clean = t => { const o = { id: t.id, title: t.title, artist: t.artist, artistId: t.artistId || '', album: t.album || '', albumId: t.albumId || '', dur: t.dur || 0, cover: t.cover || '' }; return o; };
+  const clean = t => {
+    const o = { id: t.id, title: t.title, artist: t.artist, artistId: t.artistId || '', album: t.album || '', albumId: t.albumId || '', dur: t.dur || 0, cover: t.cover || '' };
+    if (t.mvt === 'MUSIC_VIDEO_TYPE_ATV') o.atv = true;   // ya es la pista de audio oficial
+    return o;
+  };
 
   async function search(q, type = 'songs') {
     const j = await call('search', { query: q, params: PARAMS[type] });
@@ -264,7 +268,48 @@ const YTM = (() => {
     return { name: h.title, cover: h.cover || (tracks[0] && tracks[0].cover) || '', tracks };
   }
 
-  return { call, search, suggestions, radio, track, album, artist, playlist, walk, txt };
+  /* Versión de audio oficial de una canción. Los videoclips y vídeos subidos por usuarios suelen
+     tener intros o finales extra, y la letra sincronizada (LRCLIB) está cronometrada sobre la
+     pista de audio. YouTube Music enlaza cada videoclip con su audio ("counterpart"), pero sin
+     sesión iniciada la API no lo devuelve, así que se busca la pista de audio (ATV) de la misma
+     canción y se comprueba que el título y el artista coincidan. */
+  const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/\((?:[^)]*(?:video|vídeo|oficial|official|letra|lyrics?|audio|visualizer|hd|4k|mv)[^)]*)\)|\[[^\]]*\]/g, ' ')
+    .replace(/\b(official|oficial|music|video|videoclip|lyric|lyrics|letra|audio|visualizer|hd|4k|mv)\b/g, ' ')
+    .replace(/[^a-z0-9ñ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const audioCache = new Map(Object.entries((() => { try { return JSON.parse(localStorage.getItem('mz:audioMap') || '{}'); } catch (_) { return {}; } })()));
+  function saveAudioCache() {
+    const o = Object.fromEntries([...audioCache].slice(-1500));
+    try { localStorage.setItem('mz:audioMap', JSON.stringify(o)); } catch (_) {}
+  }
+  async function audioVersion(t) {
+    if (!t || !t.id) return '';
+    if (audioCache.has(t.id)) return audioCache.get(t.id);
+    let title = t.title || '', artist = t.artist || '';
+    // títulos de vídeos subidos tipo "Artista - Canción (Letra)": el canal no suele ser el artista
+    const dash = title.match(/^([^-–—]{2,40}?)\s*[-–—]\s*(.+)$/);
+    if (dash && norm(dash[2])) { artist = dash[1] + ' ' + artist; title = dash[2]; }
+    const nt = norm(title), na = norm(artist).split(' ').filter(w => w.length > 2);
+    if (!nt) return '';
+    let id = '';
+    try {
+      const j = await call('search', { query: `${norm(title)} ${dash ? dash[1] : artist}`.trim(), params: PARAMS.songs });
+      const songs = walk(j, 'musicResponsiveListItemRenderer').map(parseItem).filter(i => i.kind === 'song' && i.mvt === 'MUSIC_VIDEO_TYPE_ATV');
+      const hit = songs.find(s => {
+        const st = norm(s.title), sa = norm(s.artist);
+        const titleOk = st === nt || (st.length > 3 && (nt.startsWith(st) || st.startsWith(nt)));
+        const artistOk = !na.length || na.some(w => sa.includes(w));
+        return titleOk && artistOk;
+      });
+      id = hit ? hit.id : '';
+    } catch (_) { return ''; }        // sin red: no se guarda, se reintentará
+    audioCache.set(t.id, id);
+    if (id) audioCache.set(id, id);
+    saveAudioCache();
+    return id;
+  }
+
+  return { call, search, suggestions, radio, track, album, artist, playlist, walk, txt, audioVersion };
 })();
 
 /* ======================================================================= reproductor (YouTube IFrame, oculto) */
@@ -431,6 +476,12 @@ const App = {
       if (!t.id) { toast('No se encontró «' + t.title + '»'); return this.next(true); }
       this.updateNow(t);
     }
+    // preferir la versión de audio oficial: misma canción sin intros, y la letra va sincronizada
+    if (store.get('settings', {}).preferAudio !== false && !t.vid && !t.atv) {
+      const aid = await Promise.race([YTM.audioVersion(t), new Promise(r => setTimeout(() => r(''), 2500))]);
+      if (tok !== this._tok) return;
+      if (aid && aid !== t.id) { t.vid = t.id; t.id = aid; }
+    }
     Player.load(t.id, startAt, autoplay);
     this._counted = false;
     Library.addHistory(t);
@@ -553,8 +604,8 @@ const App = {
     $('use', r).setAttribute('href', s.repeat === 'one' ? '#i-repeat1' : '#i-repeat');
   },
   highlight() {
-    const id = this.current && this.current.id;
-    $$('.row[data-id]').forEach(r => r.classList.toggle('playing', !!id && r.dataset.id === id));
+    const id = this.current && this.current.id, vid = this.current && this.current.vid;
+    $$('.row[data-id]').forEach(r => r.classList.toggle('playing', !!id && (r.dataset.id === id || r.dataset.id === vid)));
   },
   openPlayer() {
     if (!this.current) return;

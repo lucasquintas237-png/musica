@@ -182,6 +182,50 @@ const NowPanel = (() => {
     }
   }
 
+  /* ---------------------------------------------------------------- anillo ondulado del mini reproductor
+     Indicador circular ondulado de M3 Expressive: la parte escuchada es una onda que se mueve
+     mientras suena y se aplana al pausar; lo que queda es un arco liso. */
+  function miniRing() {
+    const btn = document.querySelector('#mini [data-act=toggle]');
+    if (!btn) return;
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'mini-ring'); svg.setAttribute('viewBox', '0 0 44 44'); svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = '<path class="tr"/><path class="pl"/>';
+    btn.prepend(svg);
+    const tr = svg.querySelector('.tr'), pl = svg.querySelector('.pl');
+    const C = 22, R = 18.5, N = 10, GAP = .32;
+    let p = 0, amp = 0, phase = 0, raf = 0, last = 0;
+    const pt = (th, r) => (C + r * Math.cos(th)).toFixed(2) + ' ' + (C + r * Math.sin(th)).toFixed(2);
+    function draw(t) {
+      raf = 0;
+      const dt = last ? Math.min(.05, (t - last) / 1000) : 0; last = t;
+      const playing = !!App.state.playing && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      amp += ((playing ? 1.5 : 0) - amp) * Math.min(1, dt * 6);
+      if (playing) phase += dt * 4;
+      const s = -Math.PI / 2, e = s + Math.max(0, Math.min(1, p)) * Math.PI * 2;
+      let d = '';
+      const steps = Math.max(2, Math.ceil((e - s) * 30));
+      for (let i = 0; i <= steps; i++) {
+        const th = s + (e - s) * i / steps;
+        // la onda se suaviza en los extremos para que el arco no empiece "a saltos"
+        const edge = Math.min(1, (th - s) / .4, (e - th) / .4 + .3);
+        d += (i ? 'L' : 'M') + pt(th, R + amp * edge * Math.sin(N * th - phase));
+      }
+      pl.setAttribute('d', p > .002 ? d : '');
+      // resto: arco liso con un hueco a cada lado de la parte escuchada
+      const a0 = e + GAP, a1 = s + Math.PI * 2 - GAP;
+      tr.setAttribute('d', a1 > a0 ? `M${pt(a0, R)}A${R} ${R} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(a1, R)}` : '');
+      const visible = document.getElementById('mini').offsetParent !== null;
+      if (visible && (playing || amp > .02)) raf = requestAnimationFrame(draw); else last = 0;
+    }
+    const kick = () => { if (!raf) raf = requestAnimationFrame(draw); };
+    App.on('time', ({ cur, dur }) => { p = dur ? cur / dur : 0; kick(); });
+    App.on('track', () => { p = 0; kick(); });
+    hook('updatePlaying', kick);
+    kick();
+  }
+
   // engancharse a los métodos de App que ya actualizan el reproductor
   function hook(name, fn) {
     const orig = App[name];
@@ -208,6 +252,7 @@ const NowPanel = (() => {
       setMin(false);
     }, true);
     initDrag();
+    miniRing();
     if (store.get('nowMin', false) && App.current) setMin(true, false);
 
     hook('updateNow', () => { renderTrack(); renderFav(); });
