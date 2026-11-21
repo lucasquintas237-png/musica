@@ -8,6 +8,8 @@ wrangler.jsonc
 worker.js
 functions
 server
+tools
+*.stl
 serve.ps1
 iniciar.bat
 *.log
