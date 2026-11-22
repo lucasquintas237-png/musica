@@ -51,7 +51,8 @@ const Refract = (() => {
           inside = -dist;
         }
         let m = 0;
-        if (inside < bezel) { const t = 1 - Math.max(0, inside) / bezel; m = t * t * (3 - 2 * t); }
+        // fuera de la forma (las esquinas del rectángulo) no se desplaza nada
+        if (inside >= 0 && inside < bezel) { const t = 1 - inside / bezel; m = t * t * (3 - 2 * t); }
         const i = (y * w + x) * 4;
         d[i] = 128 - nx * m * 127; d[i + 1] = 128 - ny * m * 127; d[i + 2] = 128; d[i + 3] = 255;
       }
@@ -129,9 +130,10 @@ const Refract = (() => {
     frameOn = opts.frame !== false;
     root.classList.toggle('cg-refract', ok && enabled);
     root.classList.toggle('cg-frame', frameOn);
-    const bar = document.querySelector('#tabwrap .tb-bar'), pill = document.querySelector('#tabwrap .tb-pill');
+    // la barra refracta; la píldora NO (se mueve y cambia de forma a cada fotograma: el filtro,
+    // que es de un tamaño fijo, se quedaba como un rectángulo descolocado). Es cristal esmerilado.
+    const bar = document.querySelector('#tabwrap .tb-bar');
     if (bar) watch(bar, 'lgf-bar', { radius: () => bar.offsetHeight / 2, bezel: 16, scale: 34, blur: 2.2, ab: .2, extra: 'saturate(1.5) brightness(1.04)' });
-    if (pill) watch(pill, 'lgf-pill', { radius: () => pill.offsetHeight / 2, bezel: 14, scale: 30, blur: .4, ab: .3, extra: 'saturate(1.4) brightness(1.12)' });
     frame();
   }
 
