@@ -673,6 +673,27 @@ const Features = (() => {
     store.set('stats', s);
   }
 
+  /* ================================================================ pantalla encendida (móvil y tablet)
+     YouTube pausa la música cuando el móvil se bloquea. Con esta opción, mientras suena, se pide al
+     navegador que no apague la pantalla (Screen Wake Lock); al pausar se suelta. El sistema lo suelta
+     solo al cambiar de app, así que se vuelve a pedir al volver. */
+  const awakeSupported = () => 'wakeLock' in navigator && matchMedia('(pointer: coarse)').matches;
+  let awake = null;
+  async function syncAwake() {
+    const want = awakeSupported() && settings().keepAwake !== false && App.state.playing && document.visibilityState === 'visible';
+    if (want && !awake) {
+      try { awake = await navigator.wakeLock.request('screen'); awake.addEventListener('release', () => { awake = null; }); } catch (_) { awake = null; }
+    } else if (!want && awake) {
+      try { await awake.release(); } catch (_) {}
+      awake = null;
+    }
+  }
+  if (awakeSupported()) {
+    const up = App.updatePlaying;
+    App.updatePlaying = function (...a) { const r = up.apply(this, a); syncAwake(); return r; };
+    document.addEventListener('visibilitychange', syncAwake);
+  }
+
   /* ================================================================ configuración */
   function renderSettings(tab) {
     const w = el('<div class="wrap"><h1 class="title">Configuración</h1><div id="set-body"></div></div>');
@@ -705,6 +726,7 @@ const Features = (() => {
         <div class="set" data-k="preferAudio">${icon('lyrics')}<div class="lbl">Preferir la versión de audio<small>Si eliges un videoclip, suena su pista de audio oficial: sin intros y con la letra sincronizada</small></div>${sw(s.preferAudio !== false)}</div>
         <div class="set" style="cursor:default">${icon('queue')}<div class="lbl">Fundido entre canciones<small>La siguiente empieza mientras acaba la actual</small></div>
           <div class="seg" id="seg-cf">${[[0, 'No'], [3, '3 s'], [6, '6 s'], [10, '10 s']].map(([v, l]) => `<button data-v="${v}" class="${(+s.crossfade || 0) === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+        ${awakeSupported() ? `<div class="set" data-k="keepAwake">${icon('timer')}<div class="lbl">Mantener la pantalla encendida<small>Mientras suena música, para que no se corte al bloquearse el móvil. Baja el brillo para gastar menos batería</small></div>${sw(s.keepAwake !== false)}</div>` : ''}
         <div class="set" data-k="autoRadio">${icon('radio')}<div class="lbl">Seguir con música parecida<small>Al acabar la cola, sigue con una radio</small></div>${sw(s.autoRadio !== false)}</div>
         <div class="set" data-a="timer">${icon('timer')}<div class="lbl">Temporizador de apagado<small>${timer.end ? 'Activo · quedan ' + Math.max(0, Math.round((timer.end - Date.now()) / 60000)) + ' min' : timer.endOfTrack ? 'Al acabar la canción' : timer.songs ? `Quedan ${timer.songs} canciones` : 'Desactivado'}</small></div></div>
       </div>
@@ -749,6 +771,7 @@ const Features = (() => {
       if (k === 'dynamic') M3.setEnabled(v);
       if (k === 'refraction') Glass.setRefraction(v);
       if (k === 'autoRadio') App.state.autoRadio = v;
+      if (k === 'keepAwake') syncAwake();
       refreshSettings();
     });
     $$('.set[data-a]', b).forEach(x => x.onclick = () => ({
