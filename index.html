@@ -320,9 +320,11 @@ html:not(.lg) .tb-pill.lifted{background:rgba(255,255,255,.04)}
 .wave .rest{fill:none;stroke:var(--primary);stroke-opacity:.28;stroke-width:4;stroke-linecap:round}
 .wave .thumb{fill:var(--primary)}
 .times{display:flex;justify-content:space-between;font-size:12.5px;color:var(--fg2);font-variant-numeric:tabular-nums;margin-top:-4px}
-.p-ctrl{display:flex;align-items:center;justify-content:center;gap:8px;margin:14px 0 12px}
-.p-ctrl .icb{flex:none}
-.p-ctrl .mid{width:72px;height:64px;border-radius:22px;display:grid;place-items:center;background:var(--secondary-container);color:var(--on-secondary-container);transition:border-radius .35s var(--spring),transform .2s}
+.p-ctrl{display:flex;align-items:center;justify-content:center;gap:clamp(4px,1.6vw,8px);margin:14px 0 12px}
+.p-ctrl .icb{flex:0 1 48px;min-width:40px}
+/* en móviles estrechos la fila no cabe: el de reproducir no se aplasta (siempre cuadrado) y
+   ceden los de anterior / siguiente */
+.p-ctrl .mid{flex:0 1 72px;min-width:48px;width:72px;height:64px;border-radius:22px;display:grid;place-items:center;background:var(--secondary-container);color:var(--on-secondary-container);transition:border-radius .35s var(--spring),transform .2s}
 .p-ctrl .mid:active{border-radius:32px;transform:scale(.95)}
 .p-ctrl .mid .ic{width:32px;height:32px}
 .p-vol{display:flex;align-items:center;gap:12px;color:var(--fg2);margin-top:6px}
@@ -338,7 +340,7 @@ html:not(.lg) .tb-pill.lifted{background:rgba(255,255,255,.04)}
 .m3-play{display:grid;place-items:center;background:var(--primary);color:var(--on-primary);clip-path:var(--shape-cookie9);transition:clip-path .6s var(--spring),transform .25s var(--spring)}
 .m3-play:active{transform:scale(.9)}
 .is-playing .m3-play{clip-path:var(--shape-squircle)}
-.p-ctrl .big.m3-play{width:92px;height:92px}
+.p-ctrl .big.m3-play{flex:none;width:min(92px,24vw);height:auto;aspect-ratio:1}
 .p-ctrl .big .ic{width:40px;height:40px}
 /* letras */
 .lyrics{padding:40% 4px 60%;font-size:28px;line-height:1.28;font-weight:700;letter-spacing:-.01em;font-variation-settings:"ROND" 80}
