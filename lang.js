@@ -1,0 +1,602 @@
+'use strict';
+/* lang.js — la app en castellano, galego, català, euskara e inglés sin tocar el resto del código.
+   La app sigue escrita en castellano. Este archivo vigila la página (MutationObserver) y cambia cada
+   texto de la interfaz por su traducción según el diccionario de abajo: textos, avisos, botones y
+   atributos (aria-label, placeholder, title). Los textos con datos usan plantillas:
+   {x} = cualquier texto (un nombre) y {n} = un número; "A · B" se traduce por partes.
+   Nunca se tocan la letra ni los títulos de canciones y artistas.
+   Idioma: el elegido en Configuración (se guarda en este dispositivo) o el del navegador. */
+const I18n = (() => {
+  const LANGS = { es: 'Castellano', gl: 'Galego', ca: 'Català', eu: 'Euskara', en: 'English' };
+  const ORDER = ['es', 'gl', 'ca', 'eu', 'en'];
+  // [castellano, galego, català, euskara, english]
+  const D = [
+    ["(tú)", "(ti)", "(tu)", "(zu)", "(you)"],
+    ["A continuación", "A continuación", "A continuació", "Jarraian", "Up next"],
+    ["A la cola", "Á cola", "A la cua", "Ilarara", "To queue"],
+    ["Aceptar", "Aceptar", "D'acord", "Ados", "OK"],
+    ["Acerca de", "Acerca de", "Quant a", "Honi buruz", "About"],
+    ["Activo", "Activo", "Actiu", "Aktibo", "On"],
+    ["quedan {n} min", "quedan {n} min", "queden {n} min", "{n} min falta dira", "{n} min left"],
+    ["Quedan {n} min", "Quedan {n} min", "Queden {n} min", "{n} min falta dira", "{n} min left"],
+    ["Quedan {n} canciones", "Quedan {n} cancións", "Queden {n} cançons", "{n} abesti falta dira", "{n} songs left"],
+    ["Administrador", "Administrador", "Administrador", "Administratzailea", "Admin"],
+    ["Administrador: puede manejar la música", "Administrador: pode manexar a música", "Administrador: pot controlar la música", "Administratzailea: musika kontrola dezake", "Admin: can control the music"],
+    ["Ahora no", "Agora non", "Ara no", "Orain ez", "Not now"],
+    ["Ahora suena", "Soando agora", "Ara sona", "Orain jotzen", "Now playing"],
+    ["Al acabar la canción", "Ao rematar a canción", "En acabar la cançó", "Abestia amaitzean", "When the song ends"],
+    ["Al acabar la cola, sigue con una radio", "Ao rematar a cola, segue cunha radio", "En acabar la cua, continua amb una ràdio", "Ilara amaitzean, irrati batekin jarraitzen du", "When the queue ends, keep going with a radio"],
+    ["Al terminar seguirá sonando música parecida (radio).", "Ao rematar seguirá soando música parecida (radio).", "En acabar continuarà sonant música semblant (ràdio).", "Amaitzean antzeko musika entzuten jarraituko du (irratia).", "When it ends, similar music will keep playing (radio)."],
+    ["Aleatorio", "Aleatorio", "Aleatori", "Ausazkoa", "Shuffle"],
+    ["Alto contraste", "Alto contraste", "Contrast alt", "Kontraste handia", "High contrast"],
+    ["Anfitrión", "Anfitrión", "Amfitrió", "Ostalaria", "Host"],
+    ["Anterior", "Anterior", "Anterior", "Aurrekoa", "Previous"],
+    ["Apariencia", "Aparencia", "Aparença", "Itxura", "Appearance"],
+    ["Arrastra para mover", "Arrastra para mover", "Arrossega per moure", "Arrastatu mugitzeko", "Drag to move"],
+    ["Artista", "Artista", "Artista", "Artista", "Artist"],
+    ["Artista no disponible", "Artista non dispoñible", "Artista no disponible", "Artista ez dago eskuragarri", "Artist unavailable"],
+    ["Artistas", "Artistas", "Artistes", "Artistak", "Artists"],
+    ["Artistas más escuchados", "Artistas máis escoitados", "Artistes més escoltats", "Gehien entzundako artistak", "Top artists"],
+    ["Atajos de teclado", "Atallos de teclado", "Dreceres de teclat", "Teklatu-lasterbideak", "Keyboard shortcuts"],
+    ["Atajos del iPhone", "Atallos do iPhone", "Dreceres de l'iPhone", "iPhoneko Lasterbideak", "iPhone Shortcuts"],
+    ["Atrás", "Atrás", "Enrere", "Atzera", "Back"],
+    ["Automático", "Automático", "Automàtic", "Automatikoa", "Automatic"],
+    ["Avanzar / retroceder {n} s", "Avanzar / retroceder {n} s", "Avança / retrocedeix {n} s", "Aurreratu / atzeratu {n} s", "Forward / back {n} s"],
+    ["Añadida a favoritas", "Engadida a favoritas", "Afegida a preferides", "Gogokoetara gehituta", "Added to favorites"],
+    ["Añadida a la cola", "Engadida á cola", "Afegida a la cua", "Ilarara gehituta", "Added to queue"],
+    ["Añadida a «{x}»", "Engadida a «{x}»", "Afegida a «{x}»", "«{x}» zerrendara gehituta", "Added to «{x}»"],
+    ["Añadir a favoritas", "Engadir a favoritas", "Afegeix a preferides", "Gehitu gogokoetara", "Add to favorites"],
+    ["Añadir a la cola", "Engadir á cola", "Afegeix a la cua", "Gehitu ilarara", "Add to queue"],
+    ["Añadir a una lista", "Engadir a unha lista", "Afegeix a una llista", "Gehitu zerrenda batera", "Add to a playlist"],
+    ["Aún no hay datos: escucha algo de música.", "Aínda non hai datos: escoita algo de música.", "Encara no hi ha dades: escolta una mica de música.", "Oraindik ez dago daturik: entzun musika pixka bat.", "No data yet: listen to some music."],
+    ["Aún no tienes tokens", "Aínda non tes tokens", "Encara no tens tokens", "Oraindik ez duzu tokenik", "You don't have any tokens yet"],
+    ["BPM de la canción", "BPM da canción", "BPM de la cançó", "Abestiaren BPMa", "Song BPM"],
+    ["BPM desconocido: toca para medirlo", "BPM descoñecido: toca para medilo", "BPM desconegut: toca per mesurar-lo", "BPM ezezaguna: ukitu neurtzeko", "Unknown BPM: tap to measure it"],
+    ["BPM guardado: {n}", "BPM gardado: {n}", "BPM desat: {n}", "BPM gordeta: {n}", "BPM saved: {n}"],
+    ["Biblioteca", "Biblioteca", "Biblioteca", "Liburutegia", "Library"],
+    ["Biografía", "Biografía", "Biografia", "Biografia", "Biography"],
+    ["Bloqueados", "Bloqueados", "Bloquejats", "Blokeatuak", "Blocked"],
+    ["Bloquear", "Bloquear", "Bloqueja", "Blokeatu", "Block"],
+    ["Bloquear en esta sala", "Bloquear nesta sala", "Bloqueja en aquesta sala", "Blokeatu gela honetan", "Block in this room"],
+    ["Bloquear en todas mis salas", "Bloquear en todas as miñas salas", "Bloqueja a totes les meves sales", "Blokeatu nire gela guztietan", "Block in all my rooms"],
+    ["Borrar", "Borrar", "Esborra", "Ezabatu", "Delete"],
+    ["Borrar historial", "Borrar historial", "Esborra l'historial", "Ezabatu historia", "Clear history"],
+    ["Borrar historial de escucha", "Borrar o historial de escoitas", "Esborra l'historial d'escoltes", "Ezabatu entzuteen historia", "Clear listening history"],
+    ["Borrar token", "Borrar token", "Esborra el token", "Ezabatu tokena", "Delete token"],
+    ["Buenas noches", "Boas noites", "Bona nit", "Gabon", "Good evening"],
+    ["Buenas tardes", "Boas tardes", "Bona tarda", "Arratsalde on", "Good afternoon"],
+    ["Buenos días", "Bos días", "Bon dia", "Egun on", "Good morning"],
+    ["Buenas noches, {x}", "Boas noites, {x}", "Bona nit, {x}", "Gabon, {x}", "Good evening, {x}"],
+    ["Buenas tardes, {x}", "Boas tardes, {x}", "Bona tarda, {x}", "Arratsalde on, {x}", "Good afternoon, {x}"],
+    ["Buenos días, {x}", "Bos días, {x}", "Bon dia, {x}", "Egun on, {x}", "Good morning, {x}"],
+    ["Busca cualquier canción o artista. También puedes pegar un enlace de YouTube Music o de una lista de Spotify.", "Busca calquera canción ou artista. Tamén podes pegar unha ligazón de YouTube Music ou dunha lista de Spotify.", "Cerca qualsevol cançó o artista. També pots enganxar un enllaç de YouTube Music o d'una llista de Spotify.", "Bilatu edozein abesti edo artista. YouTube Musiceko esteka bat edo Spotifyko zerrenda baten esteka ere itsats dezakezu.", "Search for any song or artist. You can also paste a YouTube Music link or a Spotify playlist link."],
+    ["Busca otro artista", "Busca outro artista", "Cerca un altre artista", "Bilatu beste artista bat", "Search for another artist"],
+    ["Buscador", "Buscador", "Cercador", "Bilatzailea", "Search"],
+    ["Buscar", "Buscar", "Cerca", "Bilatu", "Search"],
+    ["Buscar artista", "Buscar artista", "Cerca un artista", "Bilatu artista", "Search artist"],
+    ["Buscar música", "Buscar música", "Cerca música", "Bilatu musika", "Search music"],
+    ["Buscar y poner una canción", "Buscar e poñer unha canción", "Cercar i posar una cançó", "Abesti bat bilatu eta jarri", "Search and play a song"],
+    ["Búsqueda en YouTube Music", "Busca en YouTube Music", "Cerca a YouTube Music", "YouTube Musicen bilaketa", "Search on YouTube Music"],
+    ["letras de LRCLIB", "letras de LRCLIB", "lletres de LRCLIB", "LRCLIBeko letrak", "lyrics from LRCLIB"],
+    ["servidor en {x}", "servidor en {x}", "servidor a {x}", "zerbitzaria: {x}", "server at {x}"],
+    ["Cada uno en su dispositivo, todos oyendo lo mismo", "Cada un no seu dispositivo, todos oíndo o mesmo", "Cadascú al seu dispositiu, tothom escoltant el mateix", "Bakoitza bere gailuan, denok gauza bera entzuten", "Each on their own device, all hearing the same thing"],
+    ["Calculando el BPM…", "Calculando o BPM…", "Calculant el BPM…", "BPMa kalkulatzen…", "Calculating BPM…"],
+    ["Calculando…", "Calculando…", "Calculant…", "Kalkulatzen…", "Calculating…"],
+    ["Calcular de nuevo", "Calcular de novo", "Torna a calcular", "Kalkulatu berriro", "Recalculate"],
+    ["Cambiar", "Cambiar", "Canvia", "Aldatu", "Change"],
+    ["Cambiar contraseña", "Cambiar o contrasinal", "Canvia la contrasenya", "Aldatu pasahitza", "Change password"],
+    ["Cancelar", "Cancelar", "Cancel·la", "Utzi", "Cancel"],
+    ["Canciones", "Cancións", "Cançons", "Abestiak", "Songs"],
+    ["{n} canciones", "{n} cancións", "{n} cançons", "{n} abesti", "{n} songs"],
+    ["{n} canción", "{n} canción", "{n} cançó", "abesti {n}", "{n} song"],
+    ["Canciones más escuchadas", "Cancións máis escoitadas", "Cançons més escoltades", "Gehien entzundako abestiak", "Top songs"],
+    ["Canciones populares", "Cancións populares", "Cançons populars", "Abesti ezagunak", "Popular songs"],
+    ["Canciones, artistas, álbumes o un enlace", "Cancións, artistas, álbums ou unha ligazón", "Cançons, artistes, àlbums o un enllaç", "Abestiak, artistak, albumak edo esteka bat", "Songs, artists, albums or a link"],
+    ["Canción", "Canción", "Cançó", "Abestia", "Song"],
+    ["Cargando", "Cargando", "Carregant", "Kargatzen", "Loading"],
+    ["Cerrar", "Pechar", "Tanca", "Itxi", "Close"],
+    ["Cerrar sala", "Pechar sala", "Tanca la sala", "Itxi gela", "Close room"],
+    ["Cerrar sesión", "Pechar sesión", "Tanca la sessió", "Itxi saioa", "Log out"],
+    ["Cerrar sesión en todos", "Pechar sesión en todos", "Tanca la sessió a tot arreu", "Itxi saioa guztietan", "Log out everywhere"],
+    ["Cerrar sesión en todos los dispositivos", "Pechar sesión en todos os dispositivos", "Tanca la sessió a tots els dispositius", "Itxi saioa gailu guztietan", "Log out on all devices"],
+    ["Claro", "Claro", "Clar", "Argia", "Light"],
+    ["Cola", "Cola", "Cua", "Ilara", "Queue"],
+    ["Color dinámico", "Cor dinámica", "Color dinàmic", "Kolore dinamikoa", "Dynamic color"],
+    ["Combinar con lo que tengo", "Combinar co que teño", "Combina-ho amb el que tinc", "Konbinatu daukadanarekin", "Merge with what I have"],
+    ["Compartir", "Compartir", "Comparteix", "Partekatu", "Share"],
+    ["Con un token puedes usar tu música desde otros sitios: un bot, Atajos del iPhone, un widget o tus propios programas. Cada token se ve", "Cun token podes usar a túa música desde outros sitios: un bot, Atallos do iPhone, un widget ou os teus propios programas. Cada token vese", "Amb un token pots fer servir la teva música des d'altres llocs: un bot, Dreceres de l'iPhone, un giny o els teus propis programes. Cada token es veu", "Token batekin zure musika beste leku batzuetatik erabil dezakezu: bot bat, iPhoneko Lasterbideak, widget bat edo zure programak. Token bakoitza", "With a token you can use your music from other places: a bot, iPhone Shortcuts, a widget or your own programs. Each token is shown"],
+    ["una sola vez", "unha soa vez", "una sola vegada", "behin bakarrik", "only once"],
+    ["al crearlo; guárdalo como una contraseña. Si se te escapa, bórralo y crea otro.", "ao crealo; gárdao coma un contrasinal. Se se che escapa, bórrao e crea outro.", "en crear-lo; desa'l com una contrasenya. Si se t'escapa, esborra'l i crea'n un altre.", "ikusten da, sortzean; gorde pasahitz bat bezala. Ihes egiten badizu, ezabatu eta sortu beste bat.", "when created; keep it like a password. If it leaks, delete it and create another."],
+    ["Configuración", "Configuración", "Configuració", "Ezarpenak", "Settings"],
+    ["Continuar", "Continuar", "Continua", "Jarraitu", "Continue"],
+    ["Continuar ({n})", "Continuar ({n})", "Continua ({n})", "Jarraitu ({n})", "Continue ({n})"],
+    ["Elige {n} más", "Escolle {n} máis", "Tria'n {n} més", "Aukeratu beste {n}", "Pick {n} more"],
+    ["Contraseña", "Contrasinal", "Contrasenya", "Pasahitza", "Password"],
+    ["Contraseña actual", "Contrasinal actual", "Contrasenya actual", "Egungo pasahitza", "Current password"],
+    ["Contraseña cambiada. Tus otros dispositivos tendrán que volver a entrar", "Contrasinal cambiado. Os teus outros dispositivos terán que volver entrar", "Contrasenya canviada. Els teus altres dispositius hauran de tornar a entrar", "Pasahitza aldatuta. Zure beste gailuetan berriro sartu beharko duzu", "Password changed. Your other devices will need to sign in again"],
+    ["Contraseña nueva", "Contrasinal novo", "Contrasenya nova", "Pasahitz berria", "New password"],
+    ["Controlar (token «Leer y controlar»)", "Controlar (token «Ler e controlar»)", "Controlar (token «Llegir i controlar»)", "Kontrolatu («Irakurri eta kontrolatu» tokena)", "Control («Read and control» token)"],
+    ["Copia descargada", "Copia descargada", "Còpia baixada", "Kopia deskargatuta", "Backup downloaded"],
+    ["Copia este enlace", "Copia esta ligazón", "Copia aquest enllaç", "Kopiatu esteka hau", "Copy this link"],
+    ["Copiado", "Copiado", "Copiat", "Kopiatuta", "Copied"],
+    ["Copiar", "Copiar", "Copia", "Kopiatu", "Copy"],
+    ["Copiar enlace", "Copiar ligazón", "Copia l'enllaç", "Kopiatu esteka", "Copy link"],
+    ["Crea tu cuenta", "Crea a túa conta", "Crea el teu compte", "Sortu zure kontua", "Create your account"],
+    ["Crea uno para empezar", "Crea un para comezar", "Crea'n un per començar", "Sortu bat hasteko", "Create one to get started"],
+    ["Creando radio…", "Creando radio…", "Creant ràdio…", "Irratia sortzen…", "Creating radio…"],
+    ["Creando…", "Creando…", "Creant…", "Sortzen…", "Creating…"],
+    ["Crear", "Crear", "Crea", "Sortu", "Create"],
+    ["Crear cuenta", "Crear conta", "Crea un compte", "Sortu kontua", "Create account"],
+    ["Crear token", "Crear token", "Crea un token", "Sortu tokena", "Create token"],
+    ["Crear una cuenta", "Crear unha conta", "Crea un compte", "Sortu kontu bat", "Create an account"],
+    ["Crear una lista vacía", "Crear unha lista baleira", "Crea una llista buida", "Sortu zerrenda huts bat", "Create an empty playlist"],
+    ["Crear una sala", "Crear unha sala", "Crea una sala", "Sortu gela bat", "Create a room"],
+    ["Cristal de la barra de navegación", "Cristal da barra de navegación", "Vidre de la barra de navegació", "Nabigazio-barrako beira", "Navigation bar glass"],
+    ["Cristal líquido con WebGL: refracción, aberración y brillos", "Cristal líquido con WebGL: refracción, aberración e brillos", "Vidre líquid amb WebGL: refracció, aberració i reflexos", "Beira likidoa WebGLrekin: errefrakzioa, aberrazioa eta distirak", "Liquid glass with WebGL: refraction, aberration and highlights"],
+    ["Tu navegador no tiene WebGL2; aquí se usa desenfoque", "O teu navegador non ten WebGL2; aquí úsase desenfoque", "El teu navegador no té WebGL2; aquí es fa servir desenfocament", "Zure nabigatzaileak ez du WebGL2; hemen lausotzea erabiltzen da", "Your browser doesn't support WebGL2; blur is used instead"],
+    ["Cuenta", "Conta", "Compte", "Kontua", "Account"],
+    ["Cuenta de {x}", "Conta de {x}", "Compte de {x}", "Kontua: {x}", "Account: {x}"],
+    ["CÓDIGO", "CÓDIGO", "CODI", "KODEA", "CODE"],
+    ["Código de la sala", "Código da sala", "Codi de la sala", "Gelaren kodea", "Room code"],
+    ["Cómo se usa", "Como se usa", "Com es fa servir", "Nola erabili", "How to use it"],
+    ["Cópialo ahora: no se volverá a mostrar.", "Cópiao agora: non se volverá amosar.", "Copia'l ara: no es tornarà a mostrar.", "Kopiatu orain: ez da berriro erakutsiko.", "Copy it now: it won't be shown again."],
+    ["Dato de Deezer", "Dato de Deezer", "Dada de Deezer", "Deezerren datua", "Deezer data"],
+    ["De {n} a {n} caracteres: letras, números, punto, guion o guion bajo. La contraseña, de al menos {n} (mejor una frase larga). No hay forma de recuperarla, así que apúntala.", "De {n} a {n} caracteres: letras, números, punto, guión ou guión baixo. O contrasinal, de polo menos {n} (mellor unha frase longa). Non hai forma de recuperalo, así que apúntao.", "De {n} a {n} caràcters: lletres, números, punt, guionet o guió baix. La contrasenya, d'almenys {n} (millor una frase llarga). No es pot recuperar, així que apunta-te-la.", "{n} eta {n} karaktere artean: letrak, zenbakiak, puntua, marratxoa edo azpimarra. Pasahitza, gutxienez {n} karakterekoa (hobe esaldi luze bat). Ezin da berreskuratu, beraz idatzi nonbait.", "{n} to {n} characters: letters, numbers, dot, hyphen or underscore. The password, at least {n} (a long phrase is best). It can't be recovered, so write it down."],
+    ["Desactivado", "Desactivado", "Desactivat", "Desaktibatuta", "Off"],
+    ["Desactivar", "Desactivar", "Desactiva", "Desaktibatu", "Turn off"],
+    ["Desbloquear", "Desbloquear", "Desbloqueja", "Desblokeatu", "Unblock"],
+    ["Descargar canción", "Descargar canción", "Baixa la cançó", "Deskargatu abestia", "Download song"],
+    ["Desde la API: {x}", "Desde a API: {x}", "Des de l'API: {x}", "APItik: {x}", "From the API: {x}"],
+    ["Desde una copia exportada", "Desde unha copia exportada", "Des d'una còpia exportada", "Esportatutako kopia batetik", "From an exported backup"],
+    ["Desliza a los lados para cambiar de canción", "Esvara cara aos lados para cambiar de canción", "Llisca als costats per canviar de cançó", "Irristatu alboetara abestia aldatzeko", "Swipe sideways to change song"],
+    ["Después seguirá sonando música parecida.", "Despois seguirá soando música parecida.", "Després continuarà sonant música semblant.", "Ondoren antzeko musika entzuten jarraituko du.", "Similar music will keep playing afterwards."],
+    ["El anfitrión te ha bloqueado en esta sala", "O anfitrión bloqueoute nesta sala", "L'amfitrió t'ha bloquejat en aquesta sala", "Ostalariak gela honetan blokeatu zaitu", "The host has blocked you in this room"],
+    ["El archivo no es una copia de esta app", "O ficheiro non é unha copia desta app", "El fitxer no és una còpia d'aquesta app", "Fitxategia ez da aplikazio honen kopia bat", "The file isn't a backup of this app"],
+    ["El color de fondo se mueve y late con el BPM mientras suena música", "A cor de fondo móvese e latexa co BPM mentres soa música", "El color de fons es mou i batega amb el BPM mentre sona música", "Atzeko kolorea mugitu eta BPMaren taupadan dabil musika jotzen den bitartean", "The background color moves and pulses to the BPM while music plays"],
+    ["El código tiene {n} letras o números", "O código ten {n} letras ou números", "El codi té {n} lletres o números", "Kodeak {n} letra edo zenbaki ditu", "The code has {n} letters or numbers"],
+    ["El enlace de la lista no es válido", "A ligazón da lista non é válida", "L'enllaç de la llista no és vàlid", "Zerrendaren esteka ez da baliozkoa", "The playlist link isn't valid"],
+    ["El enlace no tiene canciones (o es privado).", "A ligazón non ten cancións (ou é privada).", "L'enllaç no té cançons (o és privat).", "Estekak ez du abestirik (edo pribatua da).", "The link has no songs (or it's private)."],
+    ["El reproductor aún está cargando…", "O reprodutor aínda está cargando…", "El reproductor encara s'està carregant…", "Erreproduzigailua oraindik kargatzen ari da…", "The player is still loading…"],
+    ["Elegidas según lo que escuchas", "Escollidas segundo o que escoitas", "Triades segons el que escoltes", "Entzuten duzunaren arabera aukeratuak", "Picked from what you listen to"],
+    ["Elige", "Escolle", "Tria", "Aukeratu", "Pick"],
+    ["Elige al menos {n} artistas y preparamos tu inicio con música para ti.", "Escolle polo menos {n} artistas e preparamos o teu inicio con música para ti.", "Tria almenys {n} artistes i et preparem l'inici amb música per a tu.", "Aukeratu gutxienez {n} artista eta zure hasiera prestatuko dugu zuretzako musikarekin.", "Pick at least {n} artists and we'll set up your home with music for you."],
+    ["Elige artistas para personalizar el inicio", "Escolle artistas para personalizar o inicio", "Tria artistes per personalitzar l'inici", "Aukeratu artistak hasiera pertsonalizatzeko", "Pick artists to personalize your home"],
+    ["Elige una canción para empezar", "Escolle unha canción para comezar", "Tria una cançó per començar", "Aukeratu abesti bat hasteko", "Pick a song to start"],
+    ["Eliminar lista", "Eliminar lista", "Elimina la llista", "Ezabatu zerrenda", "Delete playlist"],
+    ["Empieza a escuchar", "Comeza a escoitar", "Comença a escoltar", "Hasi entzuten", "Start listening"],
+    ["Empiezas el día con música", "Comezas o día con música", "Comences el dia amb música", "Eguna musikarekin hasten duzu", "You start your day with music"],
+    ["En esta sala", "Nesta sala", "En aquesta sala", "Gela honetan", "In this room"],
+    ["En la sala manda {x}", "Na sala manda {x}", "A la sala mana {x}", "Gelako arduraduna: {x}", "{x} is in charge of the room"],
+    ["En todas tus salas", "En todas as túas salas", "A totes les teves sales", "Zure gela guztietan", "In all your rooms"],
+    ["Enlace", "Ligazón", "Enllaç", "Esteka", "Link"],
+    ["Enlace copiado", "Ligazón copiada", "Enllaç copiat", "Esteka kopiatuta", "Link copied"],
+    ["Enlace copiado: compártelo con quien quieras", "Ligazón copiada: compártea con quen queiras", "Enllaç copiat: comparteix-lo amb qui vulguis", "Esteka kopiatuta: partekatu nahi duzunarekin", "Link copied: share it with anyone you like"],
+    ["Enlace de la sala copiado", "Ligazón da sala copiada", "Enllaç de la sala copiat", "Gelaren esteka kopiatuta", "Room link copied"],
+    ["Enlace no compatible", "Ligazón non compatible", "Enllaç no compatible", "Esteka ez da bateragarria", "Unsupported link"],
+    ["Entrando…", "Entrando…", "Entrant…", "Sartzen…", "Signing in…"],
+    ["Entrar", "Entrar", "Entra", "Sartu", "Sign in"],
+    ["Envía tu token en la cabecera", "Envía o teu token na cabeceira", "Envia el teu token a la capçalera", "Bidali zure tokena goiburuan", "Send your token in the header"],
+    ["Eres administrador", "Es administrador", "Ets administrador", "Administratzailea zara", "You're an admin"],
+    ["Eres administrador en la sala de {x}", "Es administrador na sala de {x}", "Ets administrador a la sala de {x}", "Administratzailea zara gela honetan: {x}", "You're an admin in {x}'s room"],
+    ["Eres el anfitrión", "Es o anfitrión", "Ets l'amfitrió", "Ostalaria zara", "You're the host"],
+    ["Eres el anfitrión · {n} personas", "Es o anfitrión · {n} persoas", "Ets l'amfitrió · {n} persones", "Ostalaria zara · {n} pertsona", "You're the host · {n} people"],
+    ["Eres el anfitrión · {n} persona", "Es o anfitrión · {n} persoa", "Ets l'amfitrió · {n} persona", "Ostalaria zara · pertsona {n}", "You're the host · {n} person"],
+    ["Administrador · con {x} · {n} personas", "Administrador · con {x} · {n} persoas", "Administrador · amb {x} · {n} persones", "Administratzailea · ostalaria: {x} · {n} pertsona", "Admin · with {x} · {n} people"],
+    ["Administrador · con {x} · {n} persona", "Administrador · con {x} · {n} persoa", "Administrador · amb {x} · {n} persona", "Administratzailea · ostalaria: {x} · pertsona {n}", "Admin · with {x} · {n} person"],
+    ["Con {x} · {n} personas", "Con {x} · {n} persoas", "Amb {x} · {n} persones", "Ostalaria: {x} · {n} pertsona", "With {x} · {n} people"],
+    ["Con {x} · {n} persona", "Con {x} · {n} persoa", "Amb {x} · {n} persona", "Ostalaria: {x} · pertsona {n}", "With {x} · {n} person"],
+    ["Escucha algo de música primero para tener tu resumen", "Escoita algo de música primeiro para ter o teu resumo", "Escolta una mica de música primer per tenir el teu resum", "Entzun musika pixka bat lehenik zure laburpena izateko", "Listen to some music first to get your recap"],
+    ["Escucha algo más de música para recibir recomendaciones.", "Escoita algo máis de música para recibir recomendacións.", "Escolta una mica més de música per rebre recomanacions.", "Entzun musika gehiago gomendioak jasotzeko.", "Listen to a bit more music to get recommendations."],
+    ["Escuchado recientemente", "Escoitado recentemente", "Escoltat recentment", "Azkenaldian entzunda", "Recently played"],
+    ["Escuchando con {x}", "Escoitando con {x}", "Escoltant amb {x}", "Elkarrekin entzuten: {x}", "Listening with {x}"],
+    ["Escuchar juntos", "Escoitar xuntos", "Escoltar junts", "Elkarrekin entzun", "Listen together"],
+    ["Escuchar juntos solo funciona en la web publicada (con cuentas)", "Escoitar xuntos só funciona na web publicada (con contas)", "Escoltar junts només funciona a la web publicada (amb comptes)", "Elkarrekin entzutea argitaratutako webean bakarrik dabil (kontuekin)", "Listen together only works on the published site (with accounts)"],
+    ["Escuchas lo que pone {x}. Si eliges una canción, se le propone.", "Escoitas o que pon {x}. Se escolles unha canción, propónselle.", "Escoltes el que posa {x}. Si tries una cançó, se li proposa.", "Ostalariak ({x}) jartzen duena entzuten duzu. Abesti bat aukeratzen baduzu, proposatu egingo zaio.", "You hear what {x} plays. If you pick a song, it's suggested to them."],
+    ["Ese enlace no es de una lista, álbum o canción", "Esa ligazón non é dunha lista, álbum ou canción", "Aquest enllaç no és d'una llista, àlbum o cançó", "Esteka hori ez da zerrenda, album edo abesti batena", "That link isn't a playlist, album or song"],
+    ["Espacio", "Espazo", "Espai", "Zuriunea", "Space"],
+    ["Mayús + → / ←", "Maiús + → / ←", "Maj + → / ←", "Shift + → / ←", "Shift + → / ←"],
+    ["Esta canción no se puede proponer", "Esta canción non se pode propoñer", "Aquesta cançó no es pot proposar", "Abesti hau ezin da proposatu", "This song can't be suggested"],
+    ["Esta canción no tiene letra sincronizada", "Esta canción non ten letra sincronizada", "Aquesta cançó no té lletra sincronitzada", "Abesti honek ez du letra sinkronizaturik", "This song has no synced lyrics"],
+    ["Estadísticas", "Estatísticas", "Estadístiques", "Estatistikak", "Stats"],
+    ["Este año has escuchado", "Este ano escoitaches", "Aquest any has escoltat", "Aurten entzun duzu", "This year you listened to"],
+    ["Estimado analizando el fragmento de {n} s de Deezer", "Estimado analizando o fragmento de {n} s de Deezer", "Estimat analitzant el fragment de {n} s de Deezer", "Deezerren {n} s-ko zatia aztertuz kalkulatua", "Estimated from Deezer's {n}-second preview"],
+    ["Esto es lo que has escuchado. Vamos allá.", "Isto é o que escoitaches. Imos aló.", "Això és el que has escoltat. Som-hi.", "Hau da entzun duzuna. Goazen.", "Here's what you listened to. Let's go."],
+    ["Exportar datos", "Exportar datos", "Exporta les dades", "Esportatu datuak", "Export data"],
+    ["Favorita", "Favorita", "Preferida", "Gogokoa", "Favorite"],
+    ["Favoritas", "Favoritas", "Preferides", "Gogokoak", "Favorites"],
+    ["Favoritas, listas, historial y búsquedas se guardan en tu cuenta y se sincronizan entre dispositivos", "Favoritas, listas, historial e buscas gárdanse na túa conta e sincronízanse entre dispositivos", "Preferides, llistes, historial i cerques es desen al teu compte i se sincronitzen entre dispositius", "Gogokoak, zerrendak, historia eta bilaketak zure kontuan gordetzen dira eta gailuen artean sinkronizatzen dira", "Favorites, playlists, history and searches are saved to your account and synced across devices"],
+    ["Favoritas, listas, historial y estadísticas", "Favoritas, listas, historial e estatísticas", "Preferides, llistes, historial i estadístiques", "Gogokoak, zerrendak, historia eta estatistikak", "Favorites, playlists, history and stats"],
+    ["Fondo animado al ritmo", "Fondo animado ao ritmo", "Fons animat al ritme", "Erritmoari jarraitzen dion atzealdea", "Background animated to the beat"],
+    ["Fondo totalmente negro en modo oscuro: ahorra batería en pantallas OLED", "Fondo totalmente negro en modo escuro: aforra batería en pantallas OLED", "Fons totalment negre en mode fosc: estalvia bateria a les pantalles OLED", "Atzealde guztiz beltza modu ilunean: bateria aurrezten du OLED pantailetan", "Fully black background in dark mode: saves battery on OLED screens"],
+    ["Fondo y colores tomados de la portada", "Fondo e cores tomados da portada", "Fons i colors presos de la portada", "Azaletik hartutako atzealdea eta koloreak", "Background and colors taken from the cover"],
+    ["Fundido de {n} s entre canciones", "Fundido de {n} s entre cancións", "Fos de {n} s entre cançons", "{n} s-ko trantsizioa abestien artean", "{n}-second crossfade between songs"],
+    ["Fundido entre canciones", "Fundido entre cancións", "Fos entre cançons", "Abestien arteko trantsizioa", "Crossfade"],
+    ["Grande", "Grande", "Gran", "Handia", "Large"],
+    ["Guardada «{x}»", "Gardada «{x}»", "Desada «{x}»", "«{x}» gordeta", "Saved «{x}»"],
+    ["Guardado en tus listas", "Gardado nas túas listas", "Desat a les teves llistes", "Zure zerrendetan gordeta", "Saved to your playlists"],
+    ["Guardar", "Gardar", "Desa", "Gorde", "Save"],
+    ["Guardar en mis listas", "Gardar nas miñas listas", "Desa a les meves llistes", "Gorde nire zerrendetan", "Save to my playlists"],
+    ["Guardar imagen", "Gardar imaxe", "Desa la imatge", "Gorde irudia", "Save image"],
+    ["Hacer administrador", "Facer administrador", "Fes administrador", "Egin administratzaile", "Make admin"],
+    ["Has salido de la sala", "Saíches da sala", "Has sortit de la sala", "Gelatik irten zara", "You left the room"],
+    ["Has vuelto a tu sala", "Volviches á túa sala", "Has tornat a la teva sala", "Zure gelara itzuli zara", "You're back in your room"],
+    ["Hay una versión nueva: se aplicará cuando pares la música", "Hai unha versión nova: aplicarase cando pares a música", "Hi ha una versió nova: s'aplicarà quan aturis la música", "Bertsio berri bat dago: musika gelditzean aplikatuko da", "A new version is available: it'll apply when you stop the music"],
+    ["Historial borrado", "Historial borrado", "Historial esborrat", "Historia ezabatuta", "History cleared"],
+    ["Importada «{x}»", "Importada «{x}»", "Importada «{x}»", "«{x}» inportatuta", "Imported «{x}»"],
+    ["Importando…", "Importando…", "Important…", "Inportatzen…", "Importing…"],
+    ["Importar copia", "Importar copia", "Importa una còpia", "Inportatu kopia", "Import backup"],
+    ["Importar datos", "Importar datos", "Importa dades", "Inportatu datuak", "Import data"],
+    ["Importar lista", "Importar lista", "Importa una llista", "Inportatu zerrenda", "Import playlist"],
+    ["Importar lista (Spotify, YouTube Music, Deezer o Apple Music)", "Importar lista (Spotify, YouTube Music, Deezer ou Apple Music)", "Importa una llista (Spotify, YouTube Music, Deezer o Apple Music)", "Inportatu zerrenda (Spotify, YouTube Music, Deezer edo Apple Music)", "Import playlist (Spotify, YouTube Music, Deezer or Apple Music)"],
+    ["Inicia sesión para escuchar juntos", "Inicia sesión para escoitar xuntos", "Inicia la sessió per escoltar junts", "Hasi saioa elkarrekin entzuteko", "Sign in to listen together"],
+    ["Inicia sesión para escuchar tu música, con tu propio inicio, favoritas e historial.", "Inicia sesión para escoitar a túa música, co teu propio inicio, favoritas e historial.", "Inicia la sessió per escoltar la teva música, amb el teu propi inici, preferides i historial.", "Hasi saioa zure musika entzuteko, zure hasiera, gogoko eta historiarekin.", "Sign in to listen to your music, with your own home, favorites and history."],
+    ["Inicia sesión para usar la app", "Inicia sesión para usar a app", "Inicia la sessió per fer servir l'app", "Hasi saioa aplikazioa erabiltzeko", "Sign in to use the app"],
+    ["Iniciar radio", "Iniciar radio", "Inicia una ràdio", "Hasi irratia", "Start radio"],
+    ["Iniciar sesión", "Iniciar sesión", "Inicia la sessió", "Hasi saioa", "Sign in"],
+    ["Invitado: escucha y propone canciones", "Convidado: escoita e propón cancións", "Convidat: escolta i proposa cançons", "Gonbidatua: entzun eta abestiak proposatzen ditu", "Guest: listens and suggests songs"],
+    ["Invitar", "Convidar", "Convida", "Gonbidatu", "Invite"],
+    ["Ir al artista", "Ir ao artista", "Vés a l'artista", "Joan artistara", "Go to artist"],
+    ["Ir al álbum", "Ir ao álbum", "Vés a l'àlbum", "Joan albumera", "Go to album"],
+    ["La API necesita una cuenta: inicia sesión", "A API necesita unha conta: inicia sesión", "L'API necessita un compte: inicia la sessió", "APIak kontu bat behar du: hasi saioa", "The API needs an account: sign in"],
+    ["La cola está vacía.", "A cola está baleira.", "La cua és buida.", "Ilara hutsik dago.", "The queue is empty."],
+    ["La lista está vacía", "A lista está baleira", "La llista és buida", "Zerrenda hutsik dago", "The playlist is empty"],
+    ["La lista está vacía o es privada", "A lista está baleira ou é privada", "La llista és buida o és privada", "Zerrenda hutsik dago edo pribatua da", "The playlist is empty or private"],
+    ["La música se parará al acabar esta canción", "A música pararase ao rematar esta canción", "La música s'aturarà en acabar aquesta cançó", "Musika gelditu egingo da abesti hau amaitzean", "Music will stop after this song"],
+    ["La música se parará en {n} min", "A música pararase en {n} min", "La música s'aturarà d'aquí a {n} min", "Musika {n} min barru geldituko da", "Music will stop in {n} min"],
+    ["La música se parará tras {n} canciones", "A música pararase tras {n} cancións", "La música s'aturarà després de {n} cançons", "Musika {n} abesti ondoren geldituko da", "Music will stop after {n} songs"],
+    ["La noche es tu momento", "A noite é o teu momento", "La nit és el teu moment", "Gaua da zure unea", "Night is your time"],
+    ["La sala se ha cerrado", "A sala pechouse", "La sala s'ha tancat", "Gela itxi da", "The room has closed"],
+    ["La sesión ha caducado. Vuelve a entrar.", "A sesión caducou. Volve entrar.", "La sessió ha caducat. Torna a entrar.", "Saioa iraungi da. Sartu berriro.", "Your session expired. Sign in again."],
+    ["La siguiente empieza mientras acaba la actual", "A seguinte comeza mentres remata a actual", "La següent comença mentre acaba l'actual", "Hurrengoa unekoa amaitzen ari den bitartean hasten da", "The next one starts as the current one ends"],
+    ["Las cuentas solo funcionan en la versión publicada en internet (Cloudflare). Aquí tus datos se guardan en este navegador.", "As contas só funcionan na versión publicada en internet (Cloudflare). Aquí os teus datos gárdanse neste navegador.", "Els comptes només funcionen a la versió publicada a internet (Cloudflare). Aquí les teves dades es desen en aquest navegador.", "Kontuek internetean argitaratutako bertsioan bakarrik funtzionatzen dute (Cloudflare). Hemen zure datuak nabigatzaile honetan gordetzen dira.", "Accounts only work on the version published online (Cloudflare). Here your data is saved in this browser."],
+    ["Las dos contraseñas nuevas no coinciden", "Os dous contrasinais novos non coinciden", "Les dues contrasenyes noves no coincideixen", "Bi pasahitz berriak ez datoz bat", "The two new passwords don't match"],
+    ["Las estadísticas también se reinician", "As estatísticas tamén se reinician", "Les estadístiques també es reinicien", "Estatistikak ere berrabiarazten dira", "Stats are reset too"],
+    ["Las tardes suenan mejor", "As tardes soan mellor", "Les tardes sonen millor", "Arratsaldeek hobeto soinatzen dute", "Afternoons sound better"],
+    ["Leer (cualquier token)", "Ler (calquera token)", "Llegir (qualsevol token)", "Irakurri (edozein token)", "Read (any token)"],
+    ["Leer más", "Ler máis", "Llegeix-ne més", "Irakurri gehiago", "Read more"],
+    ["Leer y controlar", "Ler e controlar", "Llegir i controlar", "Irakurri eta kontrolatu", "Read and control"],
+    ["Letra", "Letra", "Lletra", "Letra", "Lyrics"],
+    ["Letra a pantalla completa", "Letra a pantalla completa", "Lletra a pantalla completa", "Letra pantaila osoan", "Full-screen lyrics"],
+    ["Letra antes", "Letra antes", "Lletra abans", "Letra lehenago", "Lyrics earlier"],
+    ["Letra después", "Letra despois", "Lletra després", "Letra geroago", "Lyrics later"],
+    ["Lista", "Lista", "Llista", "Zerrenda", "Playlist"],
+    ["Lista compartida", "Lista compartida", "Llista compartida", "Partekatutako zerrenda", "Shared playlist"],
+    ["Lista de Apple Music", "Lista de Apple Music", "Llista d'Apple Music", "Apple Musiceko zerrenda", "Apple Music playlist"],
+    ["Lista de Deezer", "Lista de Deezer", "Llista de Deezer", "Deezerreko zerrenda", "Deezer playlist"],
+    ["Lista de Spotify", "Lista de Spotify", "Llista de Spotify", "Spotifyko zerrenda", "Spotify playlist"],
+    ["Lista de Spotify vacía o privada", "Lista de Spotify baleira ou privada", "Llista de Spotify buida o privada", "Spotifyko zerrenda hutsa edo pribatua", "Spotify playlist empty or private"],
+    ["Lista eliminada", "Lista eliminada", "Llista eliminada", "Zerrenda ezabatuta", "Playlist deleted"],
+    ["Lista guardada", "Lista gardada", "Llista desada", "Zerrenda gordeta", "Playlist saved"],
+    ["Lista vacía. Añade canciones desde el menú ⋯ de cualquier canción.", "Lista baleira. Engade cancións desde o menú ⋯ de calquera canción.", "Llista buida. Afegeix cançons des del menú ⋯ de qualsevol cançó.", "Zerrenda hutsa. Gehitu abestiak edozein abestiren ⋯ menutik.", "Empty playlist. Add songs from any song's ⋯ menu."],
+    ["Lo más escuchado", "O máis escoitado", "El més escoltat", "Gehien entzundakoa", "Most played"],
+    ["Lo que lo use dejará de funcionar al momento", "O que o use deixará de funcionar ao momento", "El que l'utilitzi deixarà de funcionar a l'instant", "Erabiltzen duenak berehala funtzionatzeari utziko dio", "Anything using it will stop working immediately"],
+    ["Lo que más escuchas", "O que máis escoitas", "El que més escoltes", "Gehien entzuten duzuna", "What you play most"],
+    ["Lo que más escuchas de {x}", "O que máis escoitas de {x}", "El que més escoltes de {x}", "{x}: gehien entzuten duzuna", "Your most played from {x}"],
+    ["Lo que pongas lo oirán todos. Toca ⋯ junto a alguien para hacerle administrador (podrá cambiar de canción, pausar y adelantar) o para bloquearle.", "O que poñas oirano todos. Toca ⋯ xunto a alguén para facelo administrador (poderá cambiar de canción, pausar e adiantar) ou para bloqueralo.", "El que posis ho sentiran tots. Toca ⋯ al costat d'algú per fer-lo administrador (podrà canviar de cançó, pausar i avançar) o per bloquejar-lo.", "Jartzen duzuna denek entzungo dute. Ukitu ⋯ norbaiten ondoan administratzaile egiteko (abestia aldatu, pausatu eta aurreratu ahal izango du) edo blokeatzeko.", "Everyone will hear what you play. Tap ⋯ next to someone to make them an admin (they can change songs, pause and seek) or to block them."],
+    ["Lo tuyo es la madrugada", "O teu é a madrugada", "Lo teu és la matinada", "Goizaldea da zurea", "You're a late-night listener"],
+    ["Medido a mano", "Medido a man", "Mesurat a mà", "Eskuz neurtua", "Measured by hand"],
+    ["Menú", "Menú", "Menú", "Menua", "Menu"],
+    ["Mezcla con su ritmo", "Mestura co seu ritmo", "Barreja amb el seu ritme", "Bere erritmoko nahasketa", "Mix at its tempo"],
+    ["Mezcla diaria", "Mestura diaria", "Mescla diària", "Eguneko nahasketa", "Daily mix"],
+    ["Mi resumen musical", "O meu resumo musical", "El meu resum musical", "Nire musika-laburpena", "My music recap"],
+    ["Minimizar junto a la barra", "Minimizar xunto á barra", "Minimitza al costat de la barra", "Minimizatu barraren ondoan", "Minimize next to the bar"],
+    ["Mis favoritas", "As miñas favoritas", "Les meves preferides", "Nire gogokoak", "My favorites"],
+    ["Modo coche", "Modo coche", "Mode cotxe", "Auto modua", "Car mode"],
+    ["Modo invitado", "Modo convidado", "Mode convidat", "Gonbidatu modua", "Guest mode"],
+    ["Modos", "Modos", "Modes", "Moduak", "Modes"],
+    ["Muy grande", "Moi grande", "Molt gran", "Oso handia", "Very large"],
+    ["Más", "Máis", "Més", "Gehiago", "More"],
+    ["Más opciones", "Máis opcións", "Més opcions", "Aukera gehiago", "More options"],
+    ["Música", "Música", "Música", "Musika", "Music"],
+    ["Nada por aquí todavía.", "Nada por aquí aínda.", "Encara no hi ha res per aquí.", "Ezer ez oraindik hemen.", "Nothing here yet."],
+    ["Nada sonando", "Nada soando", "No sona res", "Ezer ez da jotzen ari", "Nothing playing"],
+    ["Navegador", "Navegador", "Navegador", "Nabigatzailea", "Browser"],
+    ["Negro puro", "Negro puro", "Negre pur", "Beltz hutsa", "Pure black"],
+    ["No", "Non", "No", "Ez", "No"],
+    ["No hay letra disponible para esta canción.", "Non hai letra dispoñible para esta canción.", "No hi ha lletra disponible per a aquesta cançó.", "Ez dago letrarik abesti honetarako.", "No lyrics available for this song."],
+    ["No hay más canciones en la cola.", "Non hai máis cancións na cola.", "No hi ha més cançons a la cua.", "Ez dago abesti gehiagorik ilaran.", "No more songs in the queue."],
+    ["No me interesa", "Non me interesa", "No m'interessa", "Ez zait interesatzen", "Not interested"],
+    ["No me recomiendes a {x}", "Non me recomendes a {x}", "No em recomanis {x}", "Ez gomendatu {x}", "Don't recommend {x}"],
+    ["No se encontraron canciones con ese ritmo", "Non se atoparon cancións con ese ritmo", "No s'han trobat cançons amb aquest ritme", "Ez da erritmo horretako abestirik aurkitu", "No songs found with that tempo"],
+    ["No se encontraron canciones parecidas", "Non se atoparon cancións parecidas", "No s'han trobat cançons semblants", "Ez da antzeko abestirik aurkitu", "No similar songs found"],
+    ["No se encontró ese artista", "Non se atopou ese artista", "No s'ha trobat aquest artista", "Ez da artista hori aurkitu", "Artist not found"],
+    ["No se encontró «{x}»", "Non se atopou «{x}»", "No s'ha trobat «{x}»", "Ez da «{x}» aurkitu", "«{x}» not found"],
+    ["No se pudieron cargar", "Non se puideron cargar", "No s'han pogut carregar", "Ezin izan dira kargatu", "Couldn't load"],
+    ["No se pudieron cargar sugerencias.", "Non se puideron cargar suxestións.", "No s'han pogut carregar suggeriments.", "Ezin izan dira iradokizunak kargatu.", "Couldn't load suggestions."],
+    ["No se pudo abrir el enlace.", "Non se puido abrir a ligazón.", "No s'ha pogut obrir l'enllaç.", "Ezin izan da esteka ireki.", "Couldn't open the link."],
+    ["No se pudo borrar", "Non se puido borrar", "No s'ha pogut esborrar", "Ezin izan da ezabatu", "Couldn't delete"],
+    ["No se pudo cargar", "Non se puido cargar", "No s'ha pogut carregar", "Ezin izan da kargatu", "Couldn't load"],
+    ["No se pudo cargar el reproductor de YouTube. ¿Hay conexión?", "Non se puido cargar o reprodutor de YouTube. Hai conexión?", "No s'ha pogut carregar el reproductor de YouTube. Hi ha connexió?", "Ezin izan da YouTubeko erreproduzigailua kargatu. Konexiorik ba al dago?", "Couldn't load the YouTube player. Are you online?"],
+    ["No se pudo cargar la lista.", "Non se puido cargar a lista.", "No s'ha pogut carregar la llista.", "Ezin izan da zerrenda kargatu.", "Couldn't load the playlist."],
+    ["No se pudo cargar.", "Non se puido cargar.", "No s'ha pogut carregar.", "Ezin izan da kargatu.", "Couldn't load."],
+    ["No se pudo conectar con el servidor", "Non se puido conectar co servidor", "No s'ha pogut connectar amb el servidor", "Ezin izan da zerbitzariarekin konektatu", "Couldn't connect to the server"],
+    ["No se pudo copiar", "Non se puido copiar", "No s'ha pogut copiar", "Ezin izan da kopiatu", "Couldn't copy"],
+    ["No se pudo crear el token", "Non se puido crear o token", "No s'ha pogut crear el token", "Ezin izan da tokena sortu", "Couldn't create the token"],
+    ["No se pudo crear la radio", "Non se puido crear a radio", "No s'ha pogut crear la ràdio", "Ezin izan da irratia sortu", "Couldn't create the radio"],
+    ["No se pudo crear la sala", "Non se puido crear a sala", "No s'ha pogut crear la sala", "Ezin izan da gela sortu", "Couldn't create the room"],
+    ["No se pudo entrar en la sala", "Non se puido entrar na sala", "No s'ha pogut entrar a la sala", "Ezin izan da gelan sartu", "Couldn't join the room"],
+    ["No se pudo hacer", "Non se puido facer", "No s'ha pogut fer", "Ezin izan da egin", "Couldn't do it"],
+    ["No se pudo leer la página de Apple Music", "Non se puido ler a páxina de Apple Music", "No s'ha pogut llegir la pàgina d'Apple Music", "Ezin izan da Apple Musiceko orria irakurri", "Couldn't read the Apple Music page"],
+    ["No se pudo leer la página de Spotify", "Non se puido ler a páxina de Spotify", "No s'ha pogut llegir la pàgina de Spotify", "Ezin izan da Spotifyko orria irakurri", "Couldn't read the Spotify page"],
+    ["No se pudo proponer", "Non se puido propoñer", "No s'ha pogut proposar", "Ezin izan da proposatu", "Couldn't suggest it"],
+    ["No se puede crear una radio de esta canción", "Non se pode crear unha radio desta canción", "No es pot crear una ràdio d'aquesta cançó", "Ezin da abesti honen irratirik sortu", "Can't create a radio from this song"],
+    ["No se sabe el BPM de esta canción: mídelo tocando al ritmo", "Non se sabe o BPM desta canción: mídeo tocando ao ritmo", "No se sap el BPM d'aquesta cançó: mesura'l tocant al ritme", "Abesti honen BPMa ez da ezagutzen: neurtu erritmoan ukituz", "This song's BPM is unknown: measure it by tapping to the beat"],
+    ["No te la recomendaremos más", "Non cha recomendaremos máis", "No te la recomanarem més", "Ez dizugu gehiago gomendatuko", "We won't recommend it again"],
+    ["Nombre de la lista", "Nome da lista", "Nom de la llista", "Zerrendaren izena", "Playlist name"],
+    ["Nombre de usuario", "Nome de usuario", "Nom d'usuari", "Erabiltzaile-izena", "Username"],
+    ["Nombre del token", "Nome do token", "Nom del token", "Tokenaren izena", "Token name"],
+    ["Normal", "Normal", "Normal", "Normala", "Normal"],
+    ["Novedades de tus artistas", "Novidades dos teus artistas", "Novetats dels teus artistes", "Zure artisten berritasunak", "New from your artists"],
+    ["Nueva lista", "Nova lista", "Llista nova", "Zerrenda berria", "New playlist"],
+    ["Nueva lista…", "Nova lista…", "Llista nova…", "Zerrenda berria…", "New playlist…"],
+    ["Nuevo nombre", "Novo nome", "Nom nou", "Izen berria", "New name"],
+    ["Nuevo token", "Novo token", "Token nou", "Token berria", "New token"],
+    ["Opciones", "Opcións", "Opcions", "Aukerak", "Options"],
+    ["Opciones de {x}", "Opcións de {x}", "Opcions de {x}", "Aukerak: {x}", "Options for {x}"],
+    ["Oscuro", "Escuro", "Fosc", "Iluna", "Dark"],
+    ["Para escuchar juntos inicia sesión", "Para escoitar xuntos inicia sesión", "Per escoltar junts inicia la sessió", "Elkarrekin entzuteko hasi saioa", "Sign in to listen together"],
+    ["Para escuchar juntos inicia sesión en la web publicada", "Para escoitar xuntos inicia sesión na web publicada", "Per escoltar junts inicia la sessió a la web publicada", "Elkarrekin entzuteko hasi saioa argitaratutako webean", "Sign in on the published site to listen together"],
+    ["Para qué es (p. ej. Bot de Discord)", "Para que é (p. ex. Bot de Discord)", "Per a què és (p. ex. Bot de Discord)", "Zertarako den (adib. Discord bota)", "What it's for (e.g. Discord bot)"],
+    ["Para ti", "Para ti", "Per a tu", "Zuretzat", "For you"],
+    ["Pasar a la siguiente", "Pasar á seguinte", "Passar a la següent", "Hurrengora pasatu", "Skip to next"],
+    ["Pausado solo para ti: dale a ▶ para volver con la sala", "En pausa só para ti: dálle a ▶ para volver coa sala", "En pausa només per a tu: prem ▶ per tornar amb la sala", "Zuretzat bakarrik pausatuta: sakatu ▶ gelara itzultzeko", "Paused just for you: press ▶ to rejoin the room"],
+    ["Permiso", "Permiso", "Permís", "Baimena", "Permission"],
+    ["Porque escuchaste", "Porque escoitaches", "Perquè vas escoltar", "Entzun zenuelako", "Because you listened to"],
+    ["Porque escuchaste «{x}»", "Porque escoitaches «{x}»", "Perquè vas escoltar «{x}»", "«{x}» entzun zenuelako", "Because you listened to «{x}»"],
+    ["Portada", "Portada", "Portada", "Azala", "Cover"],
+    ["Preferir la versión de audio", "Preferir a versión de audio", "Prefereix la versió d'àudio", "Hobetsi audio-bertsioa", "Prefer the audio version"],
+    ["Preparando tu música…", "Preparando a túa música…", "Preparant la teva música…", "Zure musika prestatzen…", "Getting your music ready…"],
+    ["Progreso", "Progreso", "Progrés", "Aurrerapena", "Progress"],
+    ["Propuesta enviada a {x}", "Proposta enviada a {x}", "Proposta enviada a {x}", "Proposamena bidalita: {x}", "Suggestion sent to {x}"],
+    ["{x} propone «{x}»", "{x} propón «{x}»", "{x} proposa «{x}»", "{x}: «{x}» proposatzen du", "{x} suggests «{x}»"],
+    ["Puedes cambiar de canción, pausar y adelantar en la sala de {x}.", "Podes cambiar de canción, pausar e adiantar na sala de {x}.", "Pots canviar de cançó, pausar i avançar a la sala de {x}.", "Abestia aldatu, pausatu eta aurreratu dezakezu gela honetan: {x}.", "You can change songs, pause and seek in {x}'s room."],
+    ["Puedes medirlo tocando al ritmo.", "Podes medilo tocando ao ritmo.", "Pots mesurar-lo tocant al ritme.", "Erritmoan ukituz neur dezakezu.", "You can measure it by tapping to the beat."],
+    ["Quitada de favoritas", "Quitada de favoritas", "Treta de preferides", "Gogokoetatik kenduta", "Removed from favorites"],
+    ["Quitar administrador", "Quitar administrador", "Treu l'administrador", "Kendu administratzailea", "Remove admin"],
+    ["Quitar de esta lista", "Quitar desta lista", "Treu d'aquesta llista", "Kendu zerrenda honetatik", "Remove from this playlist"],
+    ["Quitar de favoritas", "Quitar de favoritas", "Treu de preferides", "Kendu gogokoetatik", "Remove from favorites"],
+    ["Quitar de la cola", "Quitar da cola", "Treu de la cua", "Kendu ilaratik", "Remove from queue"],
+    ["Qué suena ahora", "Que soa agora", "Què sona ara", "Zer ari den jotzen", "What's playing now"],
+    ["Radio", "Radio", "Ràdio", "Irratia", "Radio"],
+    ["Radio de {x}", "Radio de {x}", "Ràdio de {x}", "{x} irratia", "{x} radio"],
+    ["Recientes", "Recentes", "Recents", "Azkenak", "Recent"],
+    ["Reemplazar todo", "Substituír todo", "Substitueix-ho tot", "Ordeztu dena", "Replace everything"],
+    ["Renombrar", "Renomear", "Canvia el nom", "Aldatu izena", "Rename"],
+    ["Repetir", "Repetir", "Repeteix", "Errepikatu", "Repeat"],
+    ["Repetir: desactivado", "Repetir: desactivado", "Repetició: desactivada", "Errepikatu: desaktibatuta", "Repeat: off"],
+    ["Repetir: esta canción", "Repetir: esta canción", "Repetició: aquesta cançó", "Errepikatu: abesti hau", "Repeat: this song"],
+    ["Repetir: todo", "Repetir: todo", "Repetició: tot", "Errepikatu: dena", "Repeat: all"],
+    ["Repite la nueva", "Repite o novo", "Repeteix la nova", "Errepikatu berria", "Repeat the new one"],
+    ["Reproducción", "Reprodución", "Reproducció", "Erreprodukzioa", "Playback"],
+    ["Reproduciendo", "Reproducindo", "Reproduint", "Erreproduzitzen", "Playing"],
+    ["Reproducir", "Reproducir", "Reprodueix", "Erreproduzitu", "Play"],
+    ["Reproducir / pausar", "Reproducir / pausar", "Reprodueix / pausa", "Erreproduzitu / pausatu", "Play / pause"],
+    ["Reproducir a continuación", "Reproducir a continuación", "Reprodueix a continuació", "Erreproduzitu jarraian", "Play next"],
+    ["Reproducir o pausar", "Reproducir ou pausar", "Reprodueix o pausa", "Erreproduzitu edo pausatu", "Play or pause"],
+    ["Ritmo de los que mueven la cabeza", "Ritmo dos que moven a cabeza", "Ritme dels que mouen el cap", "Burua mugiarazten duen erritmoa", "Head-nodding tempo"],
+    ["Sala", "Sala", "Sala", "Gela", "Room"],
+    ["Sala {x}", "Sala {x}", "Sala {x}", "{x} gela", "Room {x}"],
+    ["Sala cerrada", "Sala pechada", "Sala tancada", "Gela itxita", "Room closed"],
+    ["Saldrá de esta sala y no podrá entrar en ninguna sala tuya", "Sairá desta sala e non poderá entrar en ningunha sala túa", "Sortirà d'aquesta sala i no podrà entrar a cap sala teva", "Gela honetatik irtengo da eta ezingo da zure inongo gelatan sartu", "They'll leave this room and won't be able to join any of your rooms"],
+    ["Saldrá de esta sala y no podrá volver a entrar en ella", "Sairá desta sala e non poderá volver entrar nela", "Sortirà d'aquesta sala i no hi podrà tornar a entrar", "Gela honetatik irtengo da eta ezingo da berriro sartu", "They'll leave this room and won't be able to rejoin it"],
+    ["Salir", "Saír", "Surt", "Irten", "Leave"],
+    ["Salir de la sala", "Saír da sala", "Surt de la sala", "Irten gelatik", "Leave room"],
+    ["Salir del modo coche", "Saír do modo coche", "Surt del mode cotxe", "Irten auto modutik", "Exit car mode"],
+    ["Se borra la copia de tus datos de este dispositivo", "Bórrase a copia dos teus datos deste dispositivo", "S'esborra la còpia de les teves dades d'aquest dispositiu", "Zure datuen kopia gailu honetatik ezabatzen da", "Your data copy on this device is deleted"],
+    ["Se cerrará la sesión en tus otros dispositivos", "Pecharase a sesión nos teus outros dispositivos", "Es tancarà la sessió als teus altres dispositius", "Saioa itxi egingo da zure beste gailuetan", "You'll be signed out on your other devices"],
+    ["Secciones", "Seccións", "Seccions", "Atalak", "Sections"],
+    ["Seguir", "Seguir", "Segueix", "Jarraitu", "Follow"],
+    ["Seguir con música parecida", "Seguir con música parecida", "Continua amb música semblant", "Jarraitu antzeko musikarekin", "Keep going with similar music"],
+    ["Si eliges un videoclip, suena su pista de audio oficial: sin intros y con la letra sincronizada", "Se escolles un videoclip, soa a súa pista de audio oficial: sen intros e coa letra sincronizada", "Si tries un videoclip, sona la seva pista d'àudio oficial: sense intros i amb la lletra sincronitzada", "Bideoklip bat aukeratzen baduzu, haren audio-pista ofiziala entzungo da: sarrerarik gabe eta letra sinkronizatuarekin", "If you pick a music video, its official audio track plays: no intros and with synced lyrics"],
+    ["Siempre a tope", "Sempre a tope", "Sempre a tope", "Beti gora", "Always full throttle"],
+    ["Sigues a {n} artistas", "Segues a {n} artistas", "Segueixes {n} artistes", "{n} artista jarraitzen dituzu", "You follow {n} artists"],
+    ["Siguiendo", "Seguindo", "Seguint", "Jarraitzen", "Following"],
+    ["Siguiente", "Seguinte", "Següent", "Hurrengoa", "Next"],
+    ["Siguiente / anterior", "Seguinte / anterior", "Següent / anterior", "Hurrengoa / aurrekoa", "Next / previous"],
+    ["Silenciado", "Silenciado", "Silenciat", "Isilduta", "Muted"],
+    ["Silenciar", "Silenciar", "Silencia", "Isildu", "Mute"],
+    ["Sin conexión", "Sen conexión", "Sense connexió", "Konexiorik gabe", "Offline"],
+    ["Sin fundido entre canciones", "Sen fundido entre cancións", "Sense fos entre cançons", "Trantsiziorik gabe abestien artean", "No crossfade"],
+    ["Sin resultados.", "Sen resultados.", "Sense resultats.", "Emaitzarik ez.", "No results."],
+    ["Sincronizar", "Sincronizar", "Sincronitza", "Sinkronizatu", "Sync"],
+    ["Solo leer", "Só ler", "Només llegir", "Irakurri bakarrik", "Read only"],
+    ["Solo nombre de usuario y contraseña", "Só nome de usuario e contrasinal", "Només nom d'usuari i contrasenya", "Erabiltzaile-izena eta pasahitza bakarrik", "Just a username and password"],
+    ["Solo nombre de usuario y contraseña, sin correo", "Só nome de usuario e contrasinal, sen correo", "Només nom d'usuari i contrasenya, sense correu", "Erabiltzaile-izena eta pasahitza bakarrik, posta elektronikorik gabe", "Just a username and password, no email"],
+    ["Solo un nombre de usuario y una contraseña, sin correo.", "Só un nome de usuario e un contrasinal, sen correo.", "Només un nom d'usuari i una contrasenya, sense correu.", "Erabiltzaile-izen bat eta pasahitz bat bakarrik, posta elektronikorik gabe.", "Just a username and a password, no email."],
+    ["Sonando", "Soando", "Sonant", "Jotzen", "Playing"],
+    ["Sonará a continuación", "Soará a continuación", "Sonarà a continuació", "Jarraian entzungo da", "Playing next"],
+    ["Spotify, YouTube Music, Deezer o Apple Music", "Spotify, YouTube Music, Deezer ou Apple Music", "Spotify, YouTube Music, Deezer o Apple Music", "Spotify, YouTube Music, Deezer edo Apple Music", "Spotify, YouTube Music, Deezer or Apple Music"],
+    ["Subir / bajar volumen", "Subir / baixar volume", "Apuja / abaixa el volum", "Igo / jaitsi bolumena", "Volume up / down"],
+    ["Tamaño de letra", "Tamaño de letra", "Mida de la lletra", "Letra-tamaina", "Text size"],
+    ["También en este. Tendrás que volver a entrar en cada uno", "Tamén neste. Terás que volver entrar en cada un", "També en aquest. Hauràs de tornar a entrar a cadascun", "Honetan ere bai. Bakoitzean berriro sartu beharko duzu", "This one too. You'll need to sign in again on each"],
+    ["Te damos la bienvenida", "Dámosche a benvida", "Et donem la benvinguda", "Ongi etorri", "Welcome"],
+    ["Te va lo tranquilo", "Gústache o tranquilo", "T'agrada la calma", "Lasaia gustatzen zaizu", "You like it chill"],
+    ["Tema", "Tema", "Tema", "Gaia", "Theme"],
+    ["Temporizador", "Temporizador", "Temporitzador", "Tenporizadorea", "Timer"],
+    ["Temporizador de apagado", "Temporizador de apagado", "Temporitzador d'apagada", "Itzaltzeko tenporizadorea", "Sleep timer"],
+    ["Temporizador desactivado", "Temporizador desactivado", "Temporitzador desactivat", "Tenporizadorea desaktibatuta", "Timer off"],
+    ["Temporizador: música en pausa", "Temporizador: música en pausa", "Temporitzador: música en pausa", "Tenporizadorea: musika pausatuta", "Timer: music paused"],
+    ["Textos secundarios y bordes más marcados", "Textos secundarios e bordos máis marcados", "Textos secundaris i vores més marcades", "Bigarren mailako testuak eta ertzak nabarmenago", "Stronger secondary text and borders"],
+    ["Toca al ritmo", "Toca ao ritmo", "Toca al ritme", "Ukitu erritmoan", "Tap to the beat"],
+    ["Toca el botón (o pulsa la barra espaciadora) siguiendo el pulso unas {n} veces.", "Toca o botón (ou preme a barra espaciadora) seguindo o pulso unhas {n} veces.", "Toca el botó (o prem la barra espaiadora) seguint el pols unes {n} vegades.", "Ukitu botoia (edo sakatu zuriune-barra) taupadari jarraituz {n} bat aldiz.", "Tap the button (or press the space bar) along with the beat about {n} times."],
+    ["Toca la línea que está sonando ahora", "Toca a liña que está soando agora", "Toca la línia que sona ara", "Ukitu orain entzuten ari den lerroa", "Tap the line playing now"],
+    ["Toca ▶ para escuchar lo que suena en la sala", "Toca ▶ para escoitar o que soa na sala", "Toca ▶ per escoltar el que sona a la sala", "Ukitu ▶ gelan entzuten dena entzuteko", "Tap ▶ to hear what's playing in the room"],
+    ["Token borrado", "Token borrado", "Token esborrat", "Tokena ezabatuta", "Token deleted"],
+    ["Tu artista", "O teu artista", "El teu artista", "Zure artista", "Your artist"],
+    ["Tu canción", "A túa canción", "La teva cançó", "Zure abestia", "Your song"],
+    ["Tu hora", "A túa hora", "La teva hora", "Zure ordua", "Your hour"],
+    ["Tu música se guarda en tu cuenta", "A túa música gárdase na túa conta", "La teva música es desa al teu compte", "Zure musika zure kontuan gordetzen da", "Your music is saved to your account"],
+    ["Tu navegador no permite compartir: se ha guardado la imagen", "O teu navegador non permite compartir: gardouse a imaxe", "El teu navegador no permet compartir: s'ha desat la imatge", "Zure nabigatzaileak ez du partekatzen uzten: irudia gorde da", "Your browser can't share: the image was saved"],
+    ["Tu propio inicio, historial y búsquedas, en cualquier dispositivo", "O teu propio inicio, historial e buscas, en calquera dispositivo", "El teu propi inici, historial i cerques, a qualsevol dispositiu", "Zure hasiera, historia eta bilaketak, edozein gailutan", "Your own home, history and searches, on any device"],
+    ["Tu resumen", "O teu resumo", "El teu resum", "Zure laburpena", "Your recap"],
+    ["Tu resumen musical", "O teu resumo musical", "El teu resum musical", "Zure musika-laburpena", "Your music recap"],
+    ["Tu resumen musical {n}", "O teu resumo musical {n}", "El teu resum musical {n}", "Zure {n}ko musika-laburpena", "Your {n} music recap"],
+    ["Tu resumen {n}", "O teu resumo {n}", "El teu resum {n}", "Zure {n}ko laburpena", "Your {n} recap"],
+    ["{n} minutos · tu canción, tus artistas y más", "{n} minutos · a túa canción, os teus artistas e máis", "{n} minuts · la teva cançó, els teus artistes i més", "{n} minutu · zure abestia, zure artistak eta gehiago", "{n} minutes · your song, your artists and more"],
+    ["minutos de música · {n} canciones de {n} artistas", "minutos de música · {n} cancións de {n} artistas", "minuts de música · {n} cançons de {n} artistes", "musika-minutu · {n} abesti, {n} artistarenak", "minutes of music · {n} songs by {n} artists"],
+    ["Tu ritmo", "O teu ritmo", "El teu ritme", "Zure erritmoa", "Your tempo"],
+    ["Tu token «{x}»", "O teu token «{x}»", "El teu token «{x}»", "Zure «{x}» tokena", "Your token «{x}»"],
+    ["Tus artistas favoritos", "Os teus artistas favoritos", "Els teus artistes preferits", "Zure artista gogokoenak", "Your favorite artists"],
+    ["Tus días", "Os teus días", "Els teus dies", "Zure egunak", "Your days"],
+    ["Tus listas", "As túas listas", "Les teves llistes", "Zure zerrendak", "Your playlists"],
+    ["Tus mezclas diarias", "As túas mesturas diarias", "Les teves mescles diàries", "Zure eguneko nahasketak", "Your daily mixes"],
+    ["Tus tokens", "Os teus tokens", "Els teus tokens", "Zure tokenak", "Your tokens"],
+    ["Tus {n} canciones", "As túas {n} cancións", "Les teves {n} cançons", "Zure {n} abestiak", "Your top {n} songs"],
+    ["Vaciar", "Baleirar", "Buida", "Hustu", "Clear"],
+    ["Vale, menos {x}", "Vale, menos {x}", "D'acord, menys {x}", "Ados, {x} gutxiago", "OK, less {x}"],
+    ["Ver toda la cola", "Ver toda a cola", "Mostra tota la cua", "Ikusi ilara osoa", "See the whole queue"],
+    ["Ver todo", "Ver todo", "Mostra-ho tot", "Ikusi dena", "See all"],
+    ["Volumen", "Volume", "Volum", "Bolumena", "Volume"],
+    ["Ya está en «{x}»", "Xa está en «{x}»", "Ja és a «{x}»", "Dagoeneko «{x}» zerrendan dago", "Already in «{x}»"],
+    ["Ya no eres administrador de la sala", "Xa non es administrador da sala", "Ja no ets administrador de la sala", "Jada ez zara gelako administratzailea", "You're no longer a room admin"],
+    ["Ya no sigues a {x}", "Xa non segues a {x}", "Ja no segueixes {x}", "Jada ez duzu {x} jarraitzen", "You no longer follow {x}"],
+    ["Ahora sigues a {x}", "Agora segues a {x}", "Ara segueixes {x}", "Orain {x} jarraitzen duzu", "You now follow {x}"],
+    ["Ya tengo cuenta", "Xa teño conta", "Ja tinc compte", "Badut kontua", "I already have an account"],
+    ["{x} ahora puede manejar la música", "{x} agora pode manexar a música", "{x} ara pot controlar la música", "{x}: orain musika kontrola dezake", "{x} can now control the music"],
+    ["{x} ya no es administrador", "{x} xa non é administrador", "{x} ja no és administrador", "{x}: jada ez da administratzailea", "{x} is no longer an admin"],
+    ["{x} bloqueado en esta sala", "{x} bloqueado nesta sala", "{x} bloquejat en aquesta sala", "{x} blokeatuta gela honetan", "{x} blocked in this room"],
+    ["{x} bloqueado en todas tus salas", "{x} bloqueado en todas as túas salas", "{x} bloquejat a totes les teves sales", "{x} blokeatuta zure gela guztietan", "{x} blocked in all your rooms"],
+    ["{x} desbloqueado", "{x} desbloqueado", "{x} desbloquejat", "{x} desblokeatuta", "{x} unblocked"],
+    ["{x} te ha hecho administrador: ya puedes manejar la música", "{x} fíxote administrador: xa podes manexar a música", "{x} t'ha fet administrador: ja pots controlar la música", "{x}: administratzaile egin zaitu, orain musika kontrola dezakezu", "{x} made you an admin: you can now control the music"],
+    ["{n} canciones añadidas a la cola", "{n} cancións engadidas á cola", "{n} cançons afegides a la cua", "{n} abesti gehituta ilarara", "{n} songs added to queue"],
+    ["minutos escuchados", "minutos escoitados", "minuts escoltats", "minutu entzunda", "minutes listened"],
+    ["sin desfase", "sen desfase", "sense desfasament", "desfaserik gabe", "no offset"],
+    ["sin usar", "sen usar", "sense fer servir", "erabili gabe", "unused"],
+    ["usado el {x}", "usado o {x}", "usat el {x}", "erabilia: {x}", "used on {x}"],
+    ["¡Listo! Tu inicio ya tiene música para ti", "Listo! O teu inicio xa ten música para ti", "Fet! El teu inici ja té música per a tu", "Prest! Zure hasiera zuretzako musikarekin prest dago", "Done! Your home now has music for you"],
+    ["«Leer y controlar» también puede cambiar tus favoritas y listas y manejar la reproducción.", "«Ler e controlar» tamén pode cambiar as túas favoritas e listas e manexar a reprodución.", "«Llegir i controlar» també pot canviar les teves preferides i llistes i controlar la reproducció.", "«Irakurri eta kontrolatu» tokenak zure gogokoak eta zerrendak aldatu eta erreprodukzioa kontrola ditzake.", "«Read and control» can also change your favorites and playlists and control playback."],
+    ["¿Bloquear a {x}?", "Bloquear a {x}?", "Vols bloquejar {x}?", "{x} blokeatu?", "Block {x}?"],
+    ["¿Borrar el historial?", "Borrar o historial?", "Vols esborrar l'historial?", "Historia ezabatu?", "Clear history?"],
+    ["¿Borrar «{x}»?", "Borrar «{x}»?", "Vols esborrar «{x}»?", "«{x}» ezabatu?", "Delete «{x}»?"],
+    ["¿Cerrar sesión en todos los dispositivos?", "Pechar sesión en todos os dispositivos?", "Vols tancar la sessió a tots els dispositius?", "Saioa itxi gailu guztietan?", "Log out on all devices?"],
+    ["¿Qué música te gusta?", "Que música che gusta?", "Quina música t'agrada?", "Zer musika gustatzen zaizu?", "What music do you like?"],
+    ["Álbum", "Álbum", "Àlbum", "Albuma", "Album"],
+    ["Álbum no disponible", "Álbum non dispoñible", "Àlbum no disponible", "Albuma ez dago eskuragarri", "Album unavailable"],
+    ["Álbumes", "Álbums", "Àlbums", "Albumak", "Albums"],
+    ["Últimos {n} días", "Últimos {n} días", "Últims {n} dies", "Azken {n} egunak", "Last {n} days"],
+    ["Idioma", "Idioma", "Idioma", "Hizkuntza", "Language"],
+    ["Para desarrolladores", "Para desenvolvedores", "Per a desenvolupadors", "Garatzaileentzat", "For developers"],
+    ["Tokens personales para usar tu música desde otros programas", "Tokens persoais para usar a túa música desde outros programas", "Tokens personals per fer servir la teva música des d'altres programes", "Token pertsonalak zure musika beste programa batzuetatik erabiltzeko", "Personal tokens to use your music from other programs"],
+    // mensajes del servidor
+    ["Nombre o contraseña incorrectos", "Nome ou contrasinal incorrectos", "Nom o contrasenya incorrectes", "Izena edo pasahitza okerra", "Wrong username or password"],
+    ["Ese nombre ya está en uso", "Ese nome xa está en uso", "Aquest nom ja està en ús", "Izen hori erabilita dago", "That username is taken"],
+    ["Demasiados intentos. Espera {n} min y vuelve a probar", "Demasiados intentos. Agarda {n} min e volve probar", "Massa intents. Espera {n} min i torna-ho a provar", "Saiakera gehiegi. Itxaron {n} min eta saiatu berriro", "Too many attempts. Wait {n} min and try again"],
+    ["Demasiadas cuentas nuevas desde esta conexión. Prueba en {n} min", "Demasiadas contas novas desde esta conexión. Proba en {n} min", "Massa comptes nous des d'aquesta connexió. Prova-ho d'aquí a {n} min", "Kontu berri gehiegi konexio honetatik. Saiatu {n} min barru", "Too many new accounts from this connection. Try again in {n} min"],
+    ["La contraseña debe tener al menos {n} caracteres", "O contrasinal debe ter polo menos {n} caracteres", "La contrasenya ha de tenir almenys {n} caràcters", "Pasahitzak gutxienez {n} karaktere izan behar ditu", "The password must be at least {n} characters"],
+    ["La contraseña nueva debe tener al menos {n} caracteres", "O contrasinal novo debe ter polo menos {n} caracteres", "La contrasenya nova ha de tenir almenys {n} caràcters", "Pasahitz berriak gutxienez {n} karaktere izan behar ditu", "The new password must be at least {n} characters"],
+    ["La contraseña no puede ser tu nombre", "O contrasinal non pode ser o teu nome", "La contrasenya no pot ser el teu nom", "Pasahitza ezin da zure izena izan", "The password can't be your username"],
+    ["La contraseña actual no es correcta", "O contrasinal actual non é correcto", "La contrasenya actual no és correcta", "Egungo pasahitza ez da zuzena", "The current password is incorrect"],
+    ["Escribe tu nombre y tu contraseña", "Escribe o teu nome e o teu contrasinal", "Escriu el teu nom i la teva contrasenya", "Idatzi zure izena eta pasahitza", "Enter your username and password"],
+    ["El nombre debe tener de {n} a {n} caracteres: letras, números, punto, guion o guion bajo", "O nome debe ter de {n} a {n} caracteres: letras, números, punto, guión ou guión baixo", "El nom ha de tenir de {n} a {n} caràcters: lletres, números, punt, guionet o guió baix", "Izenak {n} eta {n} karaktere artean izan behar ditu: letrak, zenbakiak, puntua, marratxoa edo azpimarra", "The username must be {n} to {n} characters: letters, numbers, dot, hyphen or underscore"],
+    ["No puedes entrar en esta sala", "Non podes entrar nesta sala", "No pots entrar a aquesta sala", "Ezin zara gela honetan sartu", "You can't join this room"],
+    ["Esa sala no existe o ya se cerró", "Esa sala non existe ou xa se pechou", "Aquesta sala no existeix o ja s'ha tancat", "Gela hori ez dago edo itxi egin da", "That room doesn't exist or has closed"],
+    ["Solo el anfitrión puede hacer esto", "Só o anfitrión pode facer isto", "Només l'amfitrió pot fer això", "Ostalariak bakarrik egin dezake hau", "Only the host can do this"],
+    ["Solo el anfitrión y los administradores controlan la música", "Só o anfitrión e os administradores controlan a música", "Només l'amfitrió i els administradors controlen la música", "Ostalariak eta administratzaileek bakarrik kontrolatzen dute musika", "Only the host and admins control the music"],
+    ["Error del servidor", "Erro do servidor", "Error del servidor", "Zerbitzariaren errorea", "Server error"]
+  ];
+
+  // idioma: el elegido aquí o el del navegador
+  const pick = () => {
+    let l = '';
+    try { l = localStorage.getItem('mz:lang') || ''; } catch (_) {}
+    if (LANGS[l]) return l;
+    for (const n of navigator.languages || [navigator.language || 'es']) { const c = String(n).slice(0, 2).toLowerCase(); if (LANGS[c]) return c; }
+    return 'es';
+  };
+  const lang = pick();
+  document.documentElement.lang = lang;
+  const col = ORDER.indexOf(lang);
+
+  const exact = new Map(), patterns = [];
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (col > 0) for (const r of D) {
+    if (!r[col]) continue;
+    if (/\{[xn]\}/.test(r[0])) {
+      const types = [...r[0].matchAll(/\{([xn])\}/g)].map(m => m[1]);
+      const re = new RegExp('^' + esc(r[0]).replace(/\\\{x\\\}/g, '(.+?)').replace(/\\\{n\\\}/g, '(\\d+(?:[.,]\\d+)?)') + '$');
+      patterns.push({ re, types, out: r[col], fixed: r[0].replace(/\{[xn]\}/g, '').length });
+    } else exact.set(r[0], r[col]);
+  }
+  // las plantillas más concretas primero (más texto fijo)
+  patterns.sort((a, b) => b.fixed - a.fixed);
+
+  const cache = new Map();
+  function tr(s) {
+    if (col <= 0 || !s) return s;
+    const lead = s.match(/^\s*/)[0], trail = s.match(/\s*$/)[0], t = s.trim();
+    if (!t || !/[a-záéíóúñ¿¡]/i.test(t)) return s;
+    if (cache.has(t)) return lead + cache.get(t) + trail;
+    let out = exact.get(t);
+    if (out === undefined) {
+      for (const p of patterns) {
+        const m = t.match(p.re);
+        if (!m) continue;
+        const caps = { x: [], n: [] };
+        p.types.forEach((ty, i) => caps[ty].push(m[i + 1]));
+        // los {x} se traducen también si son textos conocidos (p. ej. "Con Sala ABC")
+        out = p.out.replace(/\{([xn])\}/g, (_, ty) => { const v = caps[ty].shift() ?? ''; return ty === 'x' ? (exact.get(v) ?? v) : v; });
+        break;
+      }
+    }
+    // "A · B · C": por partes
+    if (out === undefined && t.includes(' · ')) {
+      const parts = t.split(' · ').map(x => tr(x));
+      const joined = parts.join(' · ');
+      if (joined !== t) out = joined;
+    }
+    if (out === undefined) out = t;
+    if (cache.size > 3000) cache.clear();
+    cache.set(t, out);
+    return lead + out + trail;
+  }
+
+  // dónde NO se traduce: letra, títulos de canciones, artistas, campos de texto…
+  const SKIP = 'script,style,textarea,input,svg,code,.lyrics,.kk-lines,.row .txt,#p-title,#p-artist,#mini .t,#mini .s,#n-title,#n-artist,.kk-info,.car-artist,.hero h1,.tile b,.card,.shelf .t,.wr-title,.wr-sub,.wr-list,.api-code,.room-code,.rp-name,[data-no-tr]';
+  const ATTRS = ['aria-label', 'placeholder', 'title'];
+  const done = new WeakMap();
+  function node(n) {
+    const p = n.parentElement;
+    if (!p || p.closest(SKIP)) return;
+    if (done.get(n) === n.data) return;
+    const v = tr(n.data);
+    if (v !== n.data) n.data = v;
+    done.set(n, n.data);
+  }
+  function attrs(el) {
+    if (el.closest && el.closest('svg,.lyrics,.kk-lines,[data-no-tr]')) return;
+    for (const a of ATTRS) {
+      const v = el.getAttribute && el.getAttribute(a);
+      if (!v) continue;
+      const t = tr(v);
+      if (t !== v) el.setAttribute(a, t);
+    }
+  }
+  function walk(root) {
+    if (root.nodeType === 3) return node(root);
+    if (root.nodeType !== 1) return;
+    attrs(root);
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    let n;
+    while ((n = w.nextNode())) n.nodeType === 3 ? node(n) : attrs(n);
+  }
+  function start() {
+    if (col <= 0) return;
+    walk(document.body);
+    new MutationObserver(list => {
+      for (const m of list) {
+        if (m.type === 'characterData') node(m.target);
+        else if (m.type === 'attributes') attrs(m.target);
+        else m.addedNodes.forEach(walk);
+      }
+    }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+  }
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, { once: true });
+
+  function set(l) {
+    if (!LANGS[l]) return;
+    try { localStorage.setItem('mz:lang', l); } catch (_) {}
+    location.reload();
+  }
+  return { lang, langs: LANGS, set, t: tr };
+})();
+window.I18n = I18n;
