@@ -56,10 +56,14 @@ const Together = (() => {
   async function join(code) {
     code = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (code.length !== 6) return toast('El código tiene 6 letras o números');
-    if (!available()) return toast('Para escuchar juntos inicia sesión');
-    const r = await api('POST', `room/${code}/join`);
-    if (!r.ok) return toast((r.j && r.j.error) || 'No se pudo entrar en la sala');
-    enter(r.j.room, true);
+    if (!available()) return toast(window.Account && Account.supported === false ? 'Escuchar juntos solo funciona en la web publicada (con cuentas)' : 'Para escuchar juntos inicia sesión');
+    toast('Entrando en la sala…', 8000);
+    let r;
+    try { r = await api('POST', `room/${code}/join`); }
+    catch (e) { return toast('No se pudo conectar con el servidor', 4000); }
+    if (!r.ok || !r.j || !r.j.room) return toast((r.j && r.j.error) || `No se pudo entrar en la sala (error ${r.status})`, 5000);
+    try { enter(r.j.room, true); }
+    catch (e) { return toast('No se pudo entrar en la sala: ' + (e && e.message || e), 6000); }
     toast(r.j.room.isHost ? 'Has vuelto a tu sala' : r.j.room.control ? `Eres administrador en la sala de ${r.j.room.host}` : `Escuchando con ${r.j.room.host}`);
     // todos (también el anfitrión al recargar) se ponen con lo que suena ahora en la sala
     apply(r.j.room.state);

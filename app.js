@@ -41,6 +41,14 @@ addEventListener('error', e => {
   errShown = true;
   setTimeout(() => toast('Algo ha fallado en la app: ' + e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')', 9000), 500);
 });
+// lo mismo con los fallos dentro de funciones asíncronas (si no, no se veía nada)
+addEventListener('unhandledrejection', e => {
+  const r = e.reason, msg = r && (r.message || String(r));
+  if (errShown || !msg || /AbortError|NotAllowedError|play\(\)|Failed to fetch|NetworkError|Load failed/i.test(msg)) return;
+  errShown = true;
+  const at = (r && r.stack || '').match(/\/([\w.-]+\.js):(\d+)/);
+  setTimeout(() => toast('Algo ha fallado en la app: ' + msg + (at ? ' (' + at[1] + ':' + at[2] + ')' : ''), 9000), 500);
+});
 
 function toast(msg, ms = 2600) {
   const t = $('#toast');
