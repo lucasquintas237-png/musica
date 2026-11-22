@@ -74,6 +74,14 @@ const Together = (() => {
     try { localStorage.removeItem(KEY); } catch (_) {}
     document.body.classList.remove('in-room');
     bar && bar.remove(); bar = null;
+    // "Reproduciendo · Sala ABC123" ya no tiene sentido: vuelve a mostrar el álbum o el artista
+    const s = App.state;
+    if (s.from && s.from.startsWith('Sala ')) {
+      s.from = '';
+      const t = App.current, f = document.getElementById('p-from');
+      if (t && f) f.textContent = t.album || t.artist || '—';
+      App.saveQueue && App.saveQueue();
+    }
     try { await api('POST', `room/${code}/leave`); } catch (_) {}
     if (!silent) toast(host ? 'Sala cerrada' : 'Has salido de la sala');
   }
