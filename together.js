@@ -16,6 +16,11 @@ const Together = (() => {
   let lastV = 0;              // última versión del estado de la sala que conoce este dispositivo
   let quietUntil = 0;         // tras aplicar un cambio de otro, no se republica lo mismo
   let lastRoom = null;        // última vista de la sala (personas, bloqueados)
+  let needSync = false;       // al entrar (o al recargar) hay que ponerse al día antes de publicar nada
+  let intentAt = 0;           // última acción de verdad de esta persona (play, pausa, adelantar)
+  let trackAt = 0;            // último cambio de canción propio (no el que llega de la sala)
+  let hold = false;           // invitado que ha pausado solo para él
+  let hintAt = 0;             // aviso de "toca ▶" (los navegadores no dejan sonar sin tocar antes)
   const canCtl = () => !!(room && (room.isHost || room.isAdmin));
   const me = () => String((window.Account && Account.user) || '').toLowerCase();
   const KEY = 'mz:room';
@@ -28,7 +33,8 @@ const Together = (() => {
     return { ok: r.ok, status: r.status, j };
   }
   const available = () => !!(window.Account && Account.supported === true && Account.user);
-  const trackOf = t => t && { id: t.id, title: t.title, artist: t.artist, album: t.album, artistId: t.artistId, albumId: t.albumId, cover: t.cover, dur: t.dur };
+  // a la sala se publica el id con el que llegó la canción (no la versión que suene aquí)
+  const trackOf = t => t && { id: t.roomId || t.id, title: t.title, artist: t.artist, album: t.album, artistId: t.artistId, albumId: t.albumId, cover: t.cover, dur: t.dur };
 
   /* ---------------------------------------------------------------- entrar y salir */
   async function create() {
@@ -44,13 +50,15 @@ const Together = (() => {
     if (!available()) return toast('Para escuchar juntos inicia sesión');
     const r = await api('POST', `room/${code}/join`);
     if (!r.ok) return toast((r.j && r.j.error) || 'No se pudo entrar en la sala');
-    enter(r.j.room);
+    enter(r.j.room, true);
     toast(r.j.room.isHost ? 'Has vuelto a tu sala' : r.j.room.isAdmin ? `Eres administrador en la sala de ${r.j.room.host}` : `Escuchando con ${r.j.room.host}`);
-    if (!r.j.room.isHost) apply(r.j.room.state);
+    // todos (también el anfitrión al recargar) se ponen con lo que suena ahora en la sala
+    apply(r.j.room.state);
   }
-  function enter(rm) {
+  function enter(rm, joining) {
     room = { code: rm.code, isHost: rm.isHost, isAdmin: !!rm.isAdmin, host: rm.host };
     lastV = rm.v || 0;
+    needSync = !!joining; hold = false; hintAt = 0; lastTrackId = '';
     try { localStorage.setItem(KEY, rm.code); } catch (_) {}
     document.body.classList.add('in-room');
     renderBar(rm);
@@ -73,6 +81,7 @@ const Together = (() => {
   /* ---------------------------------------------------------------- anfitrión y administradores: publicar */
   function push(now, beat) {
     if (!canCtl()) return;
+    if (beat && needSync) return;                       // aún no está al día: no pisa lo que suena en la sala
     if (!beat && Date.now() < quietUntil) return;       // es el eco de un cambio de otro: no se republica
     clearTimeout(pushT);
     const send = () => {
@@ -95,15 +104,21 @@ const Together = (() => {
     const rm = r.j.room;
     if (!rm.isHost && !!rm.isAdmin !== room.isAdmin) {
       room.isAdmin = !!rm.isAdmin;
+      hold = false;
       toast(room.isAdmin ? `${rm.host} te ha hecho administrador: ya puedes manejar la música` : 'Ya no eres administrador de la sala', 4000);
     }
     renderBar(rm);
-    // quien maneja la música se ajusta a los cambios de los demás; los invitados, siempre
+    // quien maneja la música se ajusta a los cambios de los demás (y, al entrar, hasta quedar al
+    // día); los invitados, siempre
     const fresh = rm.v > lastV;
     if (fresh) lastV = rm.v;
+    const st = rm.state;
     if (canCtl()) {
-      if (fresh && rm.state && String(rm.state.by || '').toLowerCase() !== me() && rm.state.by) apply(rm.state);
-    } else apply(rm.state);
+      const other = st && st.by && String(st.by).toLowerCase() !== me();
+      if ((fresh && other) || needSync) apply(st);
+      if (needSync && inSync(st)) needSync = false;
+    } else apply(st);
+    hintPlay(st);
     if (rm.isHost) {
       (rm.suggest || []).forEach(s => {
         const st = App.state;
@@ -115,24 +130,43 @@ const Together = (() => {
   }
 
   /* ---------------------------------------------------------------- sincronizarse con la sala */
+  const expectedPos = st => st.pos + (st.playing ? (Date.now() + offset - st.at) / 1000 : 0);
+  // la misma canción aunque en este dispositivo suene otra versión (si la original no se podía
+  // reproducir aquí, la app prueba otra y cambia el id)
+  const sameTrack = (cur, st) => {
+    if (!cur || !st || !st.track) return false;
+    const id = st.track.id;
+    return cur.id === id || cur.vid === id || cur.roomId === id || !!(cur._tried && cur._tried.includes(id));
+  };
+  function inSync(st) {
+    if (!st || !st.track) return true;
+    if (!Player.ready || !sameTrack(App.current, st) || !!App.state.playing !== !!st.playing) return false;
+    return Math.abs(Player.time() - expectedPos(st)) < 2.5;
+  }
+  // tras recargar, el navegador no deja que suene hasta que se toca algo: se avisa una vez
+  function hintPlay(st) {
+    if (!st || !st.playing || hold || App.state.playing || !sameTrack(App.current, st) || !Player.ready) { if (App.state.playing) hintAt = 0; return; }
+    if (!hintAt) { hintAt = Date.now(); return; }
+    if (hintAt > 0 && Date.now() - hintAt > 4000) { hintAt = -1; toast('Toca ▶ para escuchar lo que suena en la sala', 5000); }
+  }
   function apply(st) {
-    if (!room || !st) return;
+    if (!room || !st || hold) return;
     if (!st.track) { if (App.state.playing && !canCtl()) Player.pause(); return; }
-    const expected = st.pos + (st.playing ? (Date.now() + offset - st.at) / 1000 : 0);
+    const expected = expectedPos(st);
     const cur = App.current;
     applying = true;
     try {
-      if (!cur || (cur.id !== st.track.id && cur.vid !== st.track.id)) {
+      if (!sameTrack(cur, st)) {
         if (lastTrackId === st.track.id && Date.now() - (apply._t || 0) < 4000) return;   // ya se está cargando
         lastTrackId = st.track.id; apply._t = Date.now();
         quietUntil = Date.now() + 4000;
         const s = App.state;
         if (canCtl() && s.queue.length) {
           // quien maneja la música conserva su cola: salta a esa canción (o la mete a continuación)
-          const i = s.queue.findIndex(x => x.id === st.track.id || x.vid === st.track.id);
+          const i = s.queue.findIndex(x => sameTrack(x, st));
           if (i >= 0) s.index = i;
-          else { s.queue.splice(s.index + 1, 0, { ...st.track, atv: true }); s.index++; }
-        } else { s.queue = [{ ...st.track, atv: true }]; s.index = 0; s.from = 'Sala ' + room.code; }
+          else { s.queue.splice(s.index + 1, 0, { ...st.track, atv: true, roomId: st.track.id }); s.index++; }
+        } else { s.queue = [{ ...st.track, atv: true, roomId: st.track.id }]; s.index = 0; s.from = 'Sala ' + room.code; }
         App.start(Math.max(0, expected + .5), st.playing);                                  // +0,5 s: lo que tarda en cargar
         App.saveQueue && App.saveQueue();
         return;
@@ -158,7 +192,9 @@ const Together = (() => {
         return orig.apply(this, a);
       };
     };
-    ['next', 'prev', 'toggle', 'jump'].forEach(n => wrap(n));
+    // play/pausa no se bloquea aquí: lo decide el reproductor (ver hooks), así un invitado puede
+    // darle a ▶ para empezar a oír la sala o pausar solo para él
+    ['next', 'prev', 'jump'].forEach(n => wrap(n));
     // poner una canción siendo invitado = proponerla al anfitrión
     const pl = App.playList, pwr = App.playWithRadio;
     const propose = t => { if (!t || !t.id) return toast('Esta canción no se puede proponer'); api('POST', `room/${room.code}/suggest`, { track: trackOf(t) }).then(r => toast(r.ok ? `Propuesta enviada a ${room.host}` : (r.j && r.j.error) || 'No se pudo proponer')); };
@@ -280,17 +316,34 @@ const Together = (() => {
     });
   }
 
-  // anfitrión y administradores: publicar cada cambio; también si adelantan o atrasan con la barra
+  /* Se publica solo lo que hace alguien de verdad (o el cambio de canción del anfitrión al acabar
+     una), nunca lo que el reproductor hace solo: cargar, quedarse bloqueado sin sonido tras
+     recargar, etc. Así nadie mueve a toda la sala por accidente. */
   function hostHooks() {
-    App.on('track', () => push(true));
-    const up = App.updatePlaying;
-    App.updatePlaying = function (...a) { const r = up.apply(this, a); push(); return r; };
-    let lastPos = 0, lastAt = 0;
-    App.on('time', ({ cur }) => {
-      const now = Date.now();
-      if (canCtl() && App.state.playing && lastAt && Math.abs(cur - (lastPos + (now - lastAt) / 1000)) > 2) push();
-      lastPos = cur; lastAt = now;
+    // play, pausa y adelantar (botones, barra, letra, teclado, pantalla de bloqueo, temporizador…)
+    ['play', 'pause', 'seek'].forEach(n => {
+      const orig = Player[n].bind(Player);
+      Player[n] = function (...a) {
+        if (room && !applying) {
+          if (canCtl()) { intentAt = Date.now(); needSync = false; quietUntil = 0; if (n === 'seek') { orig(...a); push(); return; } }
+          else if (n === 'seek') { toast(`En la sala manda ${room.host}`); return; }
+          else if (n === 'pause') { hold = true; toast('Pausado solo para ti: dale a ▶ para volver con la sala', 3500); }
+          else if (n === 'play') { hold = false; hintAt = -1; if (lastRoom && lastRoom.state && lastRoom.state.track) { orig(...a); setTimeout(() => apply(lastRoom.state), 400); return; } }
+        }
+        return orig(...a);
+      };
     });
+    App.on('track', () => {
+      if (!room || applying || Date.now() < quietUntil) return;
+      trackAt = Date.now(); push(true);
+    });
+    const up = App.updatePlaying;
+    App.updatePlaying = function (...a) {
+      const r = up.apply(this, a);
+      const now = Date.now();
+      if (room && canCtl() && (now - intentAt < 4000 || now - trackAt < 8000)) push();
+      return r;
+    };
   }
 
   // "#sala=CÓDIGO" en la dirección, o la sala en la que estabas antes de recargar
