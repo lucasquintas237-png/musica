@@ -120,10 +120,7 @@ const FX = (() => {
       if (t.textContent !== title) t.textContent = title;
       return;
     }
-    let bar = s.querySelector(':scope > .topbar');
-    if (!bar) { bar = document.createElement('div'); bar.className = 'topbar'; bar.innerHTML = '<div><span class="ellipsis"></span></div>'; s.prepend(bar); }
-    const sp = bar.querySelector('span');
-    if (sp.textContent !== title) sp.textContent = title;
+    // en las pestañas ya no hay barra con el título al bajar: el contenido llega limpio hasta arriba
   }
 
   /* ---------------------------------------------------------------- estirar al tirar del borde */
