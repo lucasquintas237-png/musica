@@ -190,6 +190,7 @@ const I18n = (() => {
     ["Escuchado recientemente", "Escoitado recentemente", "Escoltat recentment", "Azkenaldian entzunda", "Recently played"],
     ["Escuchando con {x}", "Escoitando con {x}", "Escoltant amb {x}", "Elkarrekin entzuten: {x}", "Listening with {x}"],
     ["Escuchar juntos", "Escoitar xuntos", "Escoltar junts", "Elkarrekin entzun", "Listen together"],
+    ["Escuchar juntos: estás en una sala", "Escoitar xuntos: estás nunha sala", "Escoltar junts: ets en una sala", "Elkarrekin entzun: gela batean zaude", "Listen together: you're in a room"],
     ["Escuchar juntos solo funciona en la web publicada (con cuentas)", "Escoitar xuntos só funciona na web publicada (con contas)", "Escoltar junts només funciona a la web publicada (amb comptes)", "Elkarrekin entzutea argitaratutako webean bakarrik dabil (kontuekin)", "Listen together only works on the published site (with accounts)"],
     ["Escuchas lo que pone {x}. Si eliges una canción, se le propone.", "Escoitas o que pon {x}. Se escolles unha canción, propónselle.", "Escoltes el que posa {x}. Si tries una cançó, se li proposa.", "Ostalariak ({x}) jartzen duena entzuten duzu. Abesti bat aukeratzen baduzu, proposatu egingo zaio.", "You hear what {x} plays. If you pick a song, it's suggested to them."],
     ["Ese enlace no es de una lista, álbum o canción", "Esa ligazón non é dunha lista, álbum ou canción", "Aquest enllaç no és d'una llista, àlbum o cançó", "Esteka hori ez da zerrenda, album edo abesti batena", "That link isn't a playlist, album or song"],

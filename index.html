@@ -508,6 +508,12 @@ html[data-fs="2"] .m3-menu .mi,html[data-fs="2"] .m3-menu .head{font-size:1.2em}
 .rb-info b{font-size:14px}.rb-info span{font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw}
 .rb-x{width:40px;height:40px;color:inherit}
 @media (min-width:1000px){ #room-bar{left:auto;right:20px;top:20px;transform:none} @keyframes roomIn{from{opacity:0;transform:translateY(-20px)}} }
+/* móvil: sin píldora (tapaba los botones de arriba); en su lugar, un punto verde en el botón de
+   Escuchar juntos mientras estás en una sala (al pulsarlo se abre la sala) */
+@media (max-width:999.98px){ #room-bar{display:none} }
+body.in-room [data-together]{position:relative;color:var(--fg)}
+body.in-room [data-together]::after{content:"";position:absolute;top:7px;right:7px;width:10px;height:10px;border-radius:50%;background:#22c55e;
+  box-shadow:0 0 0 2px var(--surface);animation:rbPulse 1.6s ease-in-out infinite;pointer-events:none}
 body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0px) + 72px)}
 .room-sheet{display:flex;flex-direction:column;align-items:center;gap:12px;padding:4px 12px 10px;text-align:center}
 .room-sheet p{margin:0}

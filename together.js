@@ -61,6 +61,7 @@ const Together = (() => {
     needSync = !!joining; hold = false; hintAt = 0; lastTrackId = '';
     try { localStorage.setItem(KEY, rm.code); } catch (_) {}
     document.body.classList.add('in-room');
+    document.querySelectorAll('[data-together]').forEach(b => b.setAttribute('aria-label', 'Escuchar juntos: estás en una sala'));
     renderBar(rm);
     clearInterval(pollT); clearInterval(beatT);
     pollT = setInterval(poll, 2000);
@@ -73,6 +74,7 @@ const Together = (() => {
     room = null;
     try { localStorage.removeItem(KEY); } catch (_) {}
     document.body.classList.remove('in-room');
+    document.querySelectorAll('[data-together]').forEach(b => b.setAttribute('aria-label', 'Escuchar juntos'));
     bar && bar.remove(); bar = null;
     // "Reproduciendo · Sala ABC123" ya no tiene sentido: vuelve a mostrar el álbum o el artista
     const s = App.state;
