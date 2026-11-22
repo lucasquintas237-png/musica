@@ -33,6 +33,15 @@ const store = {
   }
 };
 
+// si algo de la app falla en un navegador (p. ej. uno antiguo), se avisa una vez con el error,
+// para poder contarlo en vez de que los botones "no hagan nada"
+let errShown = false;
+addEventListener('error', e => {
+  if (errShown || !e.message || /ResizeObserver|Script error/i.test(e.message) || (e.filename && !e.filename.startsWith(location.origin))) return;
+  errShown = true;
+  setTimeout(() => toast('Algo ha fallado en la app: ' + e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')', 9000), 500);
+});
+
 function toast(msg, ms = 2600) {
   const t = $('#toast');
   t.textContent = msg;
@@ -367,11 +376,21 @@ const Player = {
     };
     const s = document.createElement('script');
     s.src = 'https://www.youtube.com/iframe_api';
-    s.onerror = () => { this.failed = true; toast('No se pudo cargar el reproductor de YouTube. ¿Hay conexión?', 5000); };
+    s.onerror = () => { this.failed = true; this.blockedHelp(); };
     document.head.appendChild(s);
+    // si en 15 s no está listo, algo lo bloquea (bloqueador de anuncios, red, navegador)
+    setTimeout(() => { if (!this.ready) { this.failed = true; if (App.current) this.blockedHelp(); } }, 15000);
+  },
+  // explica por qué no suena: casi siempre un bloqueador o una red que bloquea YouTube
+  blockedHelp() {
+    toast('No se pudo cargar el reproductor de YouTube. Si usas un bloqueador de anuncios (o Brave, Opera, Samsung Internet…), desactívalo para esta web y recarga. Si estás en una red de trabajo o instituto, prueba con datos móviles.', 10000);
   },
   load(id, start = 0, autoplay = true) {
-    if (!this.ready) { this.pending = { id, start, autoplay }; return; }
+    if (!this.ready) {
+      this.pending = { id, start, autoplay };
+      if (this.failed) this.blockedHelp(); else toast('Cargando el reproductor…', 2000);
+      return;
+    }
     if (this.fading) this.abortFade();
     if (autoplay) this.yt.loadVideoById({ videoId: id, startSeconds: start });
     else this.yt.cueVideoById({ videoId: id, startSeconds: start });
@@ -588,6 +607,15 @@ const App = {
       if (aid && aid !== t.id) { t.vid = t.id; t.id = aid; }
     }
     Player.load(t.id, startAt, autoplay);
+    // si a los 8 s no ha empezado a sonar, se dice por qué (en vez de no hacer nada)
+    if (autoplay) setTimeout(() => {
+      if (tok !== this._tok || this.state.playing) return;
+      if (!Player.ready) return Player.blockedHelp();
+      let st = -1;
+      try { st = Player.yt.getPlayerState(); } catch (_) {}
+      if (st === -1 || st === 5 || st === 2) toast('No empieza a sonar: toca ▶. Si sigue sin sonar, revisa el volumen y que el móvil no esté en silencio.', 6000);
+      else if (st === 3) toast('La canción tarda en cargar: la conexión va lenta', 4000);
+    }, 8000);
     this._counted = false;
     Library.addHistory(t);
     this.emit('track', t);
@@ -614,7 +642,7 @@ const App = {
   },
   toggle() {
     if (!this.current) return;
-    if (!Player.ready) return toast('El reproductor aún está cargando…');
+    if (!Player.ready) return Player.failed ? Player.blockedHelp() : toast('El reproductor aún está cargando…');
     this.state.playing ? Player.pause() : Player.play();
   },
   setShuffle(on) {
