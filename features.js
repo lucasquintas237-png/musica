@@ -576,6 +576,14 @@ const Features = (() => {
             ] }) }
           ]
         });
+        // canciones importadas sin portada ni id: se completan y se guardan en la lista
+        if (typeof Sources !== 'undefined' && Sources.fillRows) Sources.fillRows(box, pl.tracks, () => {
+          const all = Library.playlists(), cur = all.find(p => p.id === pid);
+          if (!cur) return;
+          cur.tracks.forEach((x, i) => { const t = pl.tracks[i]; if (x && !x.id && t && t.id && x.title === t.title) Object.assign(x, clean(t)); });
+          if (!cur.cover && cur.tracks[0] && cur.tracks[0].cover) cur.cover = cur.tracks[0].cover;
+          store.set('playlists', all);
+        });
       };
       render();
     });

@@ -133,7 +133,10 @@ const Sources = (() => {
         mk('lib', 'Guardar en mis listas', () => { Library.createPlaylist(d.name, d.tracks, { cover: d.cover, source: d.source }); toast('Lista guardada'); }, true);
         box.appendChild(act);
       }
-      box.appendChild(App.trackList(d.tracks.slice(0, 100), { from: d.name, onClick: (t, i) => App.playList(d.tracks, i, d.name) }));
+      const shown = d.tracks.slice(0, 100);
+      const list = App.trackList(shown, { from: d.name, onClick: (t, i) => App.playList(d.tracks, i, d.name) });
+      box.appendChild(list);
+      fillRows(list, shown);
     } catch (e) { box.innerHTML = `<div class="empty">No se pudo abrir el enlace. ${esc(e.message)}</div>`; }
   }
 
@@ -216,6 +219,40 @@ const Sources = (() => {
     return t;
   }
 
+  /* Listas importadas (Spotify, Deezer, Apple): solo traen título y artista. Esto busca en segundo
+     plano cada canción en YouTube Music (de 3 en 3) y rellena su id, portada y álbum; onEach avisa
+     de cada una para actualizar la fila. Las que ya suenan en la cola se completan también. */
+  async function complete(tracks, onEach, conc = 3) {
+    const todo = tracks.map((t, i) => [t, i]).filter(([t]) => t && !t.id && t.title);
+    let k = 0, changed = 0;
+    const worker = async () => {
+      while (k < todo.length) {
+        const [t, i] = todo[k++];
+        try { await resolve(t); } catch (_) {}
+        if (!t.id) continue;
+        changed++;
+        App.state.queue.forEach(q => { if (!q.id && q.title === t.title && q.artist === t.artist) Object.assign(q, { id: t.id, cover: q.cover || t.cover, album: q.album || t.album, albumId: q.albumId || t.albumId, artistId: q.artistId || t.artistId, dur: q.dur || t.dur }); });
+        try { onEach && onEach(t, i); } catch (_) {}
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(conc, todo.length) }, worker));
+    if (changed) App.emit('queue');
+    return changed;
+  }
+  // actualiza las filas de una lista ya pintada según se van completando sus canciones
+  function fillRows(box, tracks, done) {
+    if (!tracks.some(t => t && !t.id)) return;
+    complete(tracks, (t, i) => {
+      if (!box.isConnected) return;
+      const r = box.querySelectorAll('.row')[i];
+      if (!r) return;
+      r.dataset.id = t.id;
+      const im = r.querySelector('img.art');
+      if (im && t.cover) { delete im.dataset.orig; delete im.dataset.tries; im.src = small(t.cover); }
+      App.highlight();
+    }).then(n => { if (n && done) done(); });
+  }
+
   /* ---------------- errores de reproducción ---------------- */
   let streak = 0;
   const MSG = { 2: 'enlace no válido', 5: 'error del reproductor', 100: 'no disponible', 101: 'el autor no permite reproducirla fuera de YouTube', 150: 'el autor no permite reproducirla fuera de YouTube' };
@@ -251,5 +288,5 @@ const Sources = (() => {
   const origState = App.onPlayerState.bind(App);
   App.onPlayerState = st => { if (st === 1) streak = 0; origState(st); };
 
-  return { parseLink, linkResult, importPrompt, openYTPlaylist, seeAll, resolve, onPlaybackError, fetchSpotify, loadLink };
+  return { parseLink, linkResult, importPrompt, openYTPlaylist, seeAll, resolve, complete, fillRows, onPlaybackError, fetchSpotify, loadLink };
 })();
