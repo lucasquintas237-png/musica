@@ -954,7 +954,9 @@ const App = {
       if (!d || e.pointerId !== d.id) return;
       const dy = e.clientY - d.y0;
       if (!d.on) {
-        if (Math.abs(dy) < 6) return;
+        // un toque siempre mueve un poco el dedo: desde el contenido hace falta un gesto claro
+        // (en móviles con pantallas muy sensibles, 6 px bastaban para que pulsar un botón cerrara la hoja)
+        if (Math.abs(dy) < (d.onHandle ? 6 : 16)) return;
         if (!d.onHandle && dy < 0) { d = null; return; }      // desde el contenido, hacia arriba es desplazar
         d.on = true;
         try { box.setPointerCapture(d.id); } catch (_) {}
@@ -974,7 +976,8 @@ const App = {
       d = null;
       if (!on) { if (onHandle && e.type === 'pointerup' && e.target.closest('.sheet-handle')) toggle(); return; }
       block = true; setTimeout(() => { block = false; }, 60);
-      if (dy > h / 3 || v > 900) return this.closeSheet(true);
+      // se cierra al bajarla un tercio, o con un gesto rápido que además recorra un trozo
+      if (dy > h / 3 || (v > 900 && dy > 48)) return this.closeSheet(true);
       if (box.classList.contains('expanded') && (dy > 70 || v > 500)) box.classList.remove('expanded');
       else if (!box.classList.contains('expanded') && (dy < -40 || v < -600)) box.classList.add('expanded');
       // vuelve a su sitio con un muelle
