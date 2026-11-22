@@ -115,7 +115,11 @@ const Together = (() => {
     const st = rm.state;
     if (canCtl()) {
       const other = st && st.by && String(st.by).toLowerCase() !== me();
-      if ((fresh && other) || needSync) apply(st);
+      // tras aplicar un cambio de otro (p. ej. de un administrador), el latido del anfitrión se
+      // calla hasta que este dispositivo esté de verdad al día: si no, mientras carga la canción
+      // nueva publicaría la vieja o el segundo 0 y desharía el cambio
+      if (fresh && other) { apply(st); needSync = true; }
+      else if (needSync) apply(st);
       if (needSync && inSync(st)) needSync = false;
     } else apply(st);
     hintPlay(st);
@@ -333,6 +337,10 @@ const Together = (() => {
         return orig(...a);
       };
     });
+    // al acabar una canción solo avanza el anfitrión: el fundido entre canciones (que pasa a la
+    // siguiente de la cola propia) se desactiva para los demás mientras están en una sala
+    const cfc = App.crossfadeCheck;
+    App.crossfadeCheck = function (...a) { if (room && !room.isHost) return; return cfc.apply(this, a); };
     App.on('track', () => {
       if (!room || applying || Date.now() < quietUntil) return;
       trackAt = Date.now(); push(true);
