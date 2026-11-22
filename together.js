@@ -79,7 +79,7 @@ const Together = (() => {
     document.querySelectorAll('[data-together]').forEach(b => b.setAttribute('aria-label', 'Escuchar juntos: estás en una sala'));
     renderBar(rm);
     clearInterval(pollT); clearInterval(beatT);
-    pollT = setInterval(poll, 2000);
+    pollT = setInterval(poll, 1500);
     if (room.isHost) beatT = setInterval(() => push(true, true), 8000);
   }
   async function leave(silent) {
@@ -118,10 +118,12 @@ const Together = (() => {
   }
 
   /* ---------------------------------------------------------------- consultar la sala */
+  let polling = false;
   async function poll() {
-    if (!room) return;
+    if (!room || polling) return;
+    polling = true;
     let r;
-    try { r = await api('GET', `room/${room.code}?since=${lastEvent}`); } catch (_) { return; }
+    try { r = await api('GET', `room/${room.code}?since=${lastEvent}`); } catch (_) { return; } finally { polling = false; }
     if (!room) return;
     if (r.status === 404) { leave(true); return toast('La sala se ha cerrado'); }
     if (r.status === 403) { leave(true); return toast('El anfitrión te ha bloqueado en esta sala', 4000); }
