@@ -385,10 +385,10 @@ const Player = {
   blockedHelp() {
     toast('No se pudo cargar el reproductor de YouTube. Si usas un bloqueador de anuncios (o Brave, Opera, Samsung Internet…), desactívalo para esta web y recarga. Si estás en una red de trabajo o instituto, prueba con datos móviles.', 10000);
   },
-  load(id, start = 0, autoplay = true) {
+  load(id, start = 0, autoplay = true, quiet = false) {
     if (!this.ready) {
       this.pending = { id, start, autoplay };
-      if (this.failed) this.blockedHelp(); else toast('Cargando el reproductor…', 2000);
+      if (!quiet) { if (this.failed) this.blockedHelp(); else toast('Cargando el reproductor…', 2000); }
       return;
     }
     if (this.fading) this.abortFade();
@@ -677,6 +677,14 @@ const App = {
     store.set('volume', this.state.volume);
     const r = $('#p-vol'); r.value = this.state.volume; r.style.setProperty('--v', this.state.volume + '%');
   },
+  // segundo por el que va la canción actual (aparte de la cola, que es más grande)
+  savePos(cur) {
+    const t = this.current;
+    if (!t || !t.id) return;
+    this._posAt = Date.now();
+    const pos = cur != null ? cur : Player.time();
+    try { localStorage.setItem(store.ns + 'pos', JSON.stringify({ id: t.id, pos: Math.max(0, Math.floor(pos)) })); } catch (_) {}
+  },
   saveQueue() {
     const s = this.state;
     store.set('queue', { q: s.queue.slice(0, 300).map(clean), i: s.index, from: s.from });
@@ -772,6 +780,8 @@ const App = {
     if (this.state.playing) {
       Library.addTime(t, .25);
       if (!this._counted && cur > Math.min(30, dur / 2)) { this._counted = true; Library.countPlay(t); }
+      // por dónde va (para seguir ahí al volver a abrir la app); cada 3 s basta
+      if (Date.now() - (this._posAt || 0) > 3000) this.savePos(cur);
     }
     this.emit('time', { cur, dur });
     this.crossfadeCheck(cur, dur);
@@ -1240,8 +1250,23 @@ const App = {
     const q = store.get('queue', null);
     if (q && q.q && q.q.length) {
       s.queue = q.q; s.index = Math.min(q.i, q.q.length - 1); s.from = q.from || '';
-      if (this.current && this.current.id) { this.updateNow(this.current); Player.load(this.current.id, 0, false); }
+      if (this.current && this.current.id) {
+        const t = this.current;
+        this.updateNow(t);
+        // seguir por donde se dejó (si es la misma canción y no estaba casi acabada)
+        let p = null;
+        try { p = JSON.parse(localStorage.getItem(store.ns + 'pos') || 'null'); } catch (_) {}
+        let at = p && (p.id === t.id || p.id === t.vid) ? p.pos : 0;
+        if (t.dur && at > t.dur - 5) at = 0;
+        Player.load(t.id, at, false, true);
+        if (at) { $('#p-cur').textContent = fmt(at); this.wave && t.dur && this.wave.set(at / t.dur); }
+      }
     }
+    // al cerrar o dejar la app en segundo plano se guarda el segundo exacto
+    const keep = () => { if (this.current && Player.ready && Player.time() > 0) this.savePos(); };
+    addEventListener('pagehide', keep);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') keep(); });
+    this.on('track', () => this.savePos(0));
     this.emit('ready');
   }
 };
