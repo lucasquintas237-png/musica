@@ -272,8 +272,26 @@ input[type=range]::-moz-range-thumb{width:4px;height:40px;border:0;border-radius
 .lg #bg{display:none}
 .lg [data-glass]{background:transparent!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 .lg [data-glass-paint] .ic,.lg [data-glass-paint] span{opacity:0}
-.lg .tab,.lg .view{-webkit-mask-image:linear-gradient(#000 calc(100% - var(--lg-dock,0px) - 26px),transparent calc(100% - var(--lg-dock,0px) + 2px));
-  mask-image:linear-gradient(#000 calc(100% - var(--lg-dock,0px) - 26px),transparent calc(100% - var(--lg-dock,0px) + 2px))}
+/* Barra de navegación y píldora: cristal POR ENCIMA del contenido. El contenido pasa por detrás
+   y se ve a través: en Chromium con refracción real (refract.js, filtro SVG en backdrop-filter),
+   en el resto desenfocado. Brillo en el filo con sombras interiores. */
+.tb-bar{-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);
+  box-shadow:inset 1.5px 1.5px 0 -.5px var(--glass-rim),inset -1px -1px 0 -.5px rgba(255,255,255,.12),inset 0 0 0 1px var(--glass-edge),inset 0 0 22px rgba(255,255,255,.05),0 10px 30px rgba(0,0,0,.25)}
+.cg-refract .tb-bar{background:color-mix(in srgb,var(--glass-fill) 45%,transparent)}
+.tb-pill{-webkit-backdrop-filter:blur(4px) brightness(1.1);backdrop-filter:blur(4px) brightness(1.1);
+  box-shadow:inset 1px 1px 0 -.5px rgba(255,255,255,.5),inset -1px -1px 0 -.5px rgba(255,255,255,.14),0 3px 12px rgba(0,0,0,.18)}
+.tb-pill.lifted{background:rgba(255,255,255,.05);box-shadow:inset 1.5px 1.5px 0 -.5px rgba(255,255,255,.7),inset -1px -1px 0 -.5px rgba(255,255,255,.2),0 8px 24px rgba(0,0,0,.28)}
+/* marco de cristal alrededor de toda la pantalla (cuatro franjas que refractan lo de detrás) */
+:root{--frame-w:10px}
+#lg-frame{position:fixed;inset:0;z-index:90;pointer-events:none;display:none}
+.cg-frame #lg-frame{display:block}
+#lg-frame .e{position:absolute;display:block}
+#lg-frame .t{left:0;right:0;top:0;height:var(--frame-w)}
+#lg-frame .b{left:0;right:0;bottom:0;height:var(--frame-w)}
+#lg-frame .l{top:0;bottom:0;left:0;width:var(--frame-w)}
+#lg-frame .r{top:0;bottom:0;right:0;width:var(--frame-w)}
+#lg-frame::after{content:"";position:absolute;inset:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 1px 0 0 rgba(255,255,255,.1),inset -1px 0 0 rgba(255,255,255,.1),inset 0 -1px 0 rgba(255,255,255,.08),inset 0 0 calc(var(--frame-w) * 2) rgba(255,255,255,.07)}
+[data-theme="light"] #lg-frame::after{box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 0 0 1px rgba(0,0,0,.06),inset 0 0 calc(var(--frame-w) * 2) rgba(255,255,255,.35)}
 html:not(.lg) [data-glass]{-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);
   box-shadow:inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-edge), 0 8px 30px rgba(0,0,0,.18)}
 #tabwrap{position:fixed;z-index:6;left:50%;bottom:calc(var(--tab-gap) + var(--safe-b));transform:translateX(-50%);
@@ -286,7 +304,6 @@ html:not(.lg) [data-glass]{-webkit-backdrop-filter:blur(18px) saturate(1.6);back
 .tb-item span{font-size:10px;font-weight:600;letter-spacing:.01em;line-height:12px}
 .tb-item[aria-selected="true"]{color:#3d9bff}
 .tb-pill{position:absolute;left:4px;top:4px;height:54px;width:var(--item-w);border-radius:27px;background:var(--pill-fill);pointer-events:none}
-html:not(.lg) .tb-pill.lifted{background:rgba(255,255,255,.04)}
 
 /* ------------------------------------------------------------------ reproductor completo */
 #player{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;overflow:hidden;
@@ -891,10 +908,10 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
   .tb-item{flex-direction:row;gap:8px}
   .tb-item .ic{width:22px;height:22px}
   .tb-item span{font-size:13.5px;line-height:16px;font-weight:600}
-  /* el contenido empieza debajo de la barra y aprovecha el ancho */
-  #app,#view{top:84px}
-  .tab,.view{padding:8px 0 48px;--lg-dock:0px}
-  .lg .tab,.lg .view{-webkit-mask-image:none;mask-image:none}
+  /* el contenido empieza debajo de la barra pero llega hasta arriba: al desplazarse pasa por
+     detrás del cristal y se ve a través de él */
+  :root{--frame-w:14px}
+  .tab,.view,body.in-room .tab,body.in-room .view{padding:92px 0 48px}
   .topbar{display:none}
   .wrap{max-width:1240px;padding:0 40px}
   h1.title{font-size:56px;margin:12px 0 26px}
@@ -1059,9 +1076,9 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 
 <!-- barra Liquid Glass -->
 <div id="tabwrap" role="tablist" aria-label="Secciones">
-  <div class="tb-bar" data-glass data-glass-dock></div>
-  <div class="tb-pill" data-glass data-layer="1" data-sel></div>
-  <div class="tb-row tb-base" data-glass-paint="--tab-ic">
+  <div class="tb-bar"></div>
+  <div class="tb-pill"></div>
+  <div class="tb-row tb-base">
     <button class="tb-item" role="tab" data-tab="home"><svg class="ic"><use href="#i-home"/></svg><span>Menú</span></button>
     <button class="tb-item" role="tab" data-tab="search"><svg class="ic"><use href="#i-search"/></svg><span>Buscador</span></button>
     <button class="tb-item" role="tab" data-tab="settings"><svg class="ic"><use href="#i-gear"/></svg><span>Configuración</span></button>
@@ -1114,6 +1131,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="m3.js"></script>
 <script src="liquid.js"></script>
 <script src="glass.js"></script>
+<script src="refract.js"></script>
 <script src="app.js"></script>
 <script src="account.js"></script>
 <script src="features.js"></script>

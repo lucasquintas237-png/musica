@@ -1255,6 +1255,8 @@ const App = {
     // pestañas (barra Liquid Glass)
     const tab = store.get('tab', 'home');
     Glass.init({ tab, refraction: store.get('settings', {}).refraction !== false, onChange: (name, changed) => this.showTab(name, !changed && !this.views.length) });
+    // cristal por encima del contenido: barra, píldora y marco de la pantalla
+    if (window.Refract) { const st = store.get('settings', {}); Refract.init({ refraction: st.refraction !== false, frame: st.glassFrame !== false }); }
     this.showTab(tab);
     this.updateModes();
 

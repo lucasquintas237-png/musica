@@ -719,7 +719,8 @@ const Features = (() => {
         <div class="set" style="cursor:default">${icon('keyboard')}<div class="lbl">Tamaño de letra</div>
           <div class="seg" id="seg-fs">${[[0, 'Normal'], [1, 'Grande'], [2, 'Muy grande']].map(([v, l]) => `<button data-v="${v}" class="${(+s.fontSize || 0) === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="set" data-k="animBg">${icon('radio')}<div class="lbl">Fondo animado al ritmo<small>El color de fondo se mueve y late con el BPM mientras suena música</small></div>${sw(s.animBg !== false)}</div>
-        <div class="set" data-k="refraction">${icon('search')}<div class="lbl">Cristal de la barra de navegación<small>${Glass.supported ? 'Cristal líquido con WebGL: refracción, aberración y brillos' : 'Tu navegador no tiene WebGL2; aquí se usa desenfoque'}</small></div>${sw(s.refraction !== false && Glass.supported)}</div>
+        <div class="set" data-k="refraction">${icon('search')}<div class="lbl">Cristal líquido<small>${window.Refract && Refract.supported ? 'La barra refracta lo que pasa por detrás, con aberración y brillos' : 'Tu navegador no permite la refracción; aquí se usa desenfoque'}</small></div>${sw(s.refraction !== false)}</div>
+        <div class="set" data-k="glassFrame">${icon('full')}<div class="lbl">Borde de cristal en la pantalla<small>Un marco fino de cristal líquido alrededor de toda la pantalla</small></div>${sw(s.glassFrame !== false)}</div>
       </div>
       <h2 class="sec">Reproducción</h2>
       <div class="group">
@@ -766,10 +767,10 @@ const Features = (() => {
     });
     $$('.set[data-k]', b).forEach(x => x.onclick = () => {
       const k = x.dataset.k, cur = settings()[k] !== false, v = !cur;
-      if (k === 'refraction' && !Glass.supported) return toast('Tu navegador no admite la refracción; se usa desenfoque');
       setSetting(k, v);
       if (k === 'dynamic') M3.setEnabled(v);
-      if (k === 'refraction') Glass.setRefraction(v);
+      if (k === 'refraction') { Glass.setRefraction(v); window.Refract && Refract.setEnabled(v); }
+      if (k === 'glassFrame') window.Refract && Refract.setFrame(v);
       if (k === 'autoRadio') App.state.autoRadio = v;
       if (k === 'keepAwake') syncAwake();
       refreshSettings();
