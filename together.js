@@ -231,11 +231,15 @@ const Together = (() => {
   }
 
   /* ---------------------------------------------------------------- eventos: reacciones, chat, canciones añadidas */
+  const seenEv = new Set();
   function handleEvents(list) {
     let newChat = false;
     for (const e of list) {
-      if (e.id <= lastEvent) continue;
-      lastEvent = e.id;
+      // cada evento llega por tiempo real (al momento) y otra vez al consultar: se muestra una vez
+      const n = e.data && e.data.n;
+      if (n) { if (seenEv.has(n)) { if (e.id > lastEvent) lastEvent = e.id; continue; } seenEv.add(n); if (seenEv.size > 300) seenEv.delete(seenEv.values().next().value); }
+      else if (e.id <= lastEvent) continue;
+      if (e.id > lastEvent) lastEvent = e.id;
       if (e.kind === 'react') { if (!isMe(e.by)) floatEmoji(e.data.emoji, e.by); }
       else if (e.kind === 'chat') {
         chat.push(e); if (chat.length > 50) chat.shift(); newChat = true;

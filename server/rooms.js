@@ -74,11 +74,23 @@ async function getConf(db, code) {
   try { return { ...DEFAULT_CONF, ...(r ? JSON.parse(r.conf) : {}) }; } catch (_) { return { ...DEFAULT_CONF }; }
 }
 const canControl = async (db, code, me, hostId, conf) => me.id === hostId || conf.guestsControl || await isAdmin(db, code, me.id);
-// guarda un evento (cifrado) y lo reparte al momento
+/* Un evento (reacción, mensaje, canción añadida): primero se reparte al momento por tiempo real
+   y después se guarda (cifrado) para quien no tenga tiempo real. Lleva una marca única "n" para
+   que nadie lo vea dos veces (por tiempo real y al consultar). */
 async function event(db, code, me, kind, data) {
   const at = Date.now();
-  const row = await db.prepare('INSERT INTO room_events (code, user_name, kind, data, created) VALUES (?, ?, ?, ?, ?) RETURNING id').bind(code, me.username, kind, await sealJ(code, 'event', data), at).first();
-  if (row) notify(code, { t: 'event', e: { id: row.id, by: me.username, kind, data, at } });
+  data = { ...data, n: crypto.randomUUID().slice(0, 12) };
+  notify(code, { t: 'event', e: { id: 0, by: me.username, kind, data, at } });
+  const save = (async () => db.prepare('INSERT INTO room_events (code, user_name, kind, data, created) VALUES (?, ?, ?, ?, ?)').bind(code, me.username, kind, await sealJ(code, 'event', data), at).run())();
+  if (CTX && CTX.waitUntil) CTX.waitUntil(save.catch(() => {})); else await save;
+}
+// límite de reacciones y mensajes (12 cada 10 s por persona), en memoria: no espera a la base de datos
+const hits = new Map();
+function tooFast(user) {
+  const now = Date.now(), list = (hits.get(user) || []).filter(t => now - t < 10e3);
+  list.push(now); hits.set(user, list);
+  if (hits.size > 2000) hits.delete(hits.keys().next().value);
+  return list.length > 12;
 }
 const dropRoom = (db, code) => db.batch(ROOM_TABLES.map(t => db.prepare(`DELETE FROM ${t} WHERE code = ?`).bind(code))
   .concat([db.prepare("DELETE FROM room_bans WHERE code = ? AND code <> ''").bind(code), db.prepare('DELETE FROM rooms WHERE code = ?').bind(code)]));
@@ -245,11 +257,12 @@ export async function handleRooms(request, env, path, ctx) {
     const now = Date.now(), posAt = +b.posAt;
     const at = posAt && Math.abs(posAt - now) < 5000 ? Math.min(posAt, now) : now;
     const state = { track: b.track === undefined ? prev.track : cleanTrack(b.track), playing: !!b.playing, pos: Math.max(0, +b.pos || 0), at, by: me.username };
+    // primero se reparte (al momento) y luego se guarda
+    notify(code, { t: 'state', state, v: r.v + 1 });
     await db.batch([
       db.prepare('UPDATE rooms SET state = ?, v = v + 1, updated = ? WHERE code = ?').bind(await sealJ(code, 'state', state), now, code),
       touchStmt(db, code, me)
     ]);
-    notify(code, { t: 'state', state, v: r.v + 1 });
     return json(200, { ok: true, v: r.v + 1, now: Date.now() });
   }
   // ---- cola compartida
@@ -278,8 +291,7 @@ export async function handleRooms(request, env, path, ctx) {
   }
   // ---- reacciones y chat (con un límite para que nadie inunde la sala)
   if (act === 'react' || act === 'chat') {
-    const n = await db.prepare('SELECT COUNT(*) AS n FROM room_events WHERE code = ? AND user_name = ? AND created > ?').bind(code, me.username, Date.now() - 10e3).first();
-    if (n && n.n >= 12) return err(429, 'Más despacio');
+    if (tooFast(me.id + ':' + code)) return err(429, 'Más despacio');
     const b = await body();
     if (act === 'react') {
       if (!EMOJIS.includes(b.emoji)) return err(400, 'Reacción no válida');
