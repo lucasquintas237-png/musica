@@ -23,7 +23,7 @@ const CSP = [
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https:",
   "media-src 'self' blob: https:",
-  "connect-src 'self'",
+  "connect-src 'self' wss://musica.lucasquintas237.workers.dev",
   "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
   "worker-src 'self'",
   "manifest-src 'self'",
@@ -48,7 +48,7 @@ function secure(res, request, isPage) {
 }
 const fail = (status, msg) => new Response(JSON.stringify({ error: msg }), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 
-async function api(request, env, p) {
+async function api(request, env, p, ctx) {
   // API pública con token (v1): su propio control de acceso y CORS
   if (/^v1(\/|$)/.test(p)) return handleApi(request, env, p);
   // CSRF: lo que cambia algo con la cookie solo puede venir de esta web
@@ -60,7 +60,7 @@ async function api(request, env, p) {
     // la app con la API: tokens, qué suena, órdenes a distancia
     if (/^(tokens|presence|remote)(\/|$)/.test(p)) return await handleApi(request, env, p);
     // escuchar juntos (salas)
-    if (/^room(\/|$)/.test(p)) return await handleRooms(request, env, p);
+    if (/^room(\/|$)/.test(p)) return await handleRooms(request, env, p, ctx);
     // cuentas y datos de usuario (base de datos D1)
     if (/^(auth\/|data(\/|$))/.test(p)) return await handleAccounts(request, env, p);
     // todo lo demás (búsqueda, letras, Spotify, portadas) exige haber iniciado sesión
@@ -73,10 +73,17 @@ async function api(request, env, p) {
   return onRequest({ request, params: { path: p.split('/') } });
 }
 
+// sala en tiempo real (un Durable Object por sala)
+export { RoomHub } from './server/hub.js';
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/')) return secure(await api(request, env, url.pathname.slice('/api/'.length)), request, false);
+    if (url.pathname.startsWith('/api/')) {
+      const res = await api(request, env, url.pathname.slice('/api/'.length), ctx);
+      // la respuesta que abre un WebSocket se devuelve tal cual (copiarla rompería la conexión)
+      return res.status === 101 ? res : secure(res, request, false);
+    }
     const res = await env.ASSETS.fetch(request);
     return secure(res, request, (res.headers.get('Content-Type') || '').includes('text/html'));
   }

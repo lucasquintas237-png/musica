@@ -21,8 +21,14 @@ import { seal, open } from './crypto.js';
 
 /* Cifrado: lo que suena, la cola, el chat y las reacciones se guardan cifrados (AES-256-GCM con
    DATA_KEY, ver crypto.js), cada dato ligado a su sala. Lo antiguo sin cifrar se sigue leyendo. */
-let ENV = null;
-const sealJ = (code, kind, obj) => seal(ENV, `room:${code}:${kind}`, JSON.stringify(obj));
+let ENV = null, CTX = null;
+// aviso en tiempo real a todos los conectados a la sala (si hay Durable Objects; si no, polling)
+function notify(code, msg, opts = '') {
+  if (!ENV || !ENV.ROOMS) return;
+  const p = ENV.ROOMS.get(ENV.ROOMS.idFromName(code)).fetch('https://hub/broadcast' + opts, { method: 'POST', body: JSON.stringify(msg) }).catch(() => {});
+  if (CTX && CTX.waitUntil) CTX.waitUntil(p);
+}
+const sealJ =(code, kind, obj) => seal(ENV, `room:${code}:${kind}`, JSON.stringify(obj));
 async function openJ(code, kind, s, def = null) {
   try { return JSON.parse(await open(ENV, `room:${code}:${kind}`, s)); } catch (_) { return def; }
 }
@@ -68,7 +74,12 @@ async function getConf(db, code) {
   try { return { ...DEFAULT_CONF, ...(r ? JSON.parse(r.conf) : {}) }; } catch (_) { return { ...DEFAULT_CONF }; }
 }
 const canControl = async (db, code, me, hostId, conf) => me.id === hostId || conf.guestsControl || await isAdmin(db, code, me.id);
-const event = async (db, code, me, kind, data) => db.prepare('INSERT INTO room_events (code, user_name, kind, data, created) VALUES (?, ?, ?, ?, ?)').bind(code, me.username, kind, await sealJ(code, 'event', data), Date.now()).run();
+// guarda un evento (cifrado) y lo reparte al momento
+async function event(db, code, me, kind, data) {
+  const at = Date.now();
+  const row = await db.prepare('INSERT INTO room_events (code, user_name, kind, data, created) VALUES (?, ?, ?, ?, ?) RETURNING id').bind(code, me.username, kind, await sealJ(code, 'event', data), at).first();
+  if (row) notify(code, { t: 'event', e: { id: row.id, by: me.username, kind, data, at } });
+}
 const dropRoom = (db, code) => db.batch(ROOM_TABLES.map(t => db.prepare(`DELETE FROM ${t} WHERE code = ?`).bind(code))
   .concat([db.prepare("DELETE FROM room_bans WHERE code = ? AND code <> ''").bind(code), db.prepare('DELETE FROM rooms WHERE code = ?').bind(code)]));
 
@@ -131,10 +142,10 @@ async function addToQueue(db, code, me, track) {
   return null;
 }
 
-export async function handleRooms(request, env, path) {
+export async function handleRooms(request, env, path, ctx) {
   const db = env.DB;
   if (!db) return err(501, 'Las salas necesitan la base de datos de Cloudflare');
-  ENV = env;
+  ENV = env; CTX = ctx || null;
   await schema(db); await roomSchema(db);
   const me = await currentUser(request, db);
   if (!me) return err(401, 'Inicia sesión para escuchar juntos');
@@ -165,7 +176,7 @@ export async function handleRooms(request, env, path) {
     return err(500, 'No se pudo crear la sala');
   }
 
-  const mm = path.match(/^room\/([A-Z2-9]{6})(?:\/(join|state|suggest|leave|admin|ban|unban|queue|queue\/remove|queue\/pop|react|chat|conf))?$/);
+  const mm = path.match(/^room\/([A-Z2-9]{6})(?:\/(join|state|suggest|leave|admin|ban|unban|queue|queue\/remove|queue\/pop|react|chat|conf|ws))?$/);
   if (!mm) return err(404, 'api');
   const code = mm[1], act = mm[2] || '';
   // la sala y si estás bloqueado, en una sola consulta
@@ -177,6 +188,15 @@ export async function handleRooms(request, env, path) {
     return err(403, 'No puedes entrar en esta sala');
   }
   const view = async (since = -1, pre = []) => json(200, { room: await roomView(db, code, me, since, pre), now: Date.now() });
+
+  // conexión en tiempo real: se abre el WebSocket con el Durable Object de la sala
+  if (act === 'ws') {
+    if (!env.ROOMS) return err(501, 'Sin tiempo real en este servidor');
+    if (request.headers.get('Upgrade') !== 'websocket') return err(426, 'Se esperaba un WebSocket');
+    const h = new Headers(request.headers);
+    h.set('X-User', me.username);
+    return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(new Request('https://hub/ws', { headers: h }));
+  }
 
   // ---- anfitrión: administradores y bloqueos (por nombre de usuario)
   if (act === 'admin' || act === 'ban' || act === 'unban') {
@@ -200,6 +220,9 @@ export async function handleRooms(request, env, path) {
     } else {
       await db.prepare('DELETE FROM room_bans WHERE host_id = ? AND user_id = ? AND code = ?').bind(me.id, u.id, scopeCode).run();
     }
+    // a quien se bloquea se le cierra la conexión (al volver a preguntar verá que no puede entrar)
+    if (act === 'ban') notify(code, { t: 'refresh' }, '?user=' + encodeURIComponent(u.username) + '&close=1');
+    notify(code, { t: 'refresh' });
     return view();
   }
 
@@ -207,7 +230,7 @@ export async function handleRooms(request, env, path) {
     const since = parseInt(new URL(request.url).searchParams.get('since'), 10);
     return view(Number.isFinite(since) && since >= 0 ? since : -1, [touchStmt(db, code, me)]);
   }
-  if (act === 'join' && m === 'POST') return view('h', [touchStmt(db, code, me)]);
+  if (act === 'join' && m === 'POST') { notify(code, { t: 'refresh' }); return view('h', [touchStmt(db, code, me)]); }
   if (m !== 'POST') return err(405, 'Método no permitido');
   const conf = await getConf(db, code);
 
@@ -217,17 +240,23 @@ export async function handleRooms(request, env, path) {
     // el latido periódico no pisa un cambio que aún no ha visto quien lo envía
     if (b.beat && +b.baseV !== r.v) return json(200, { ok: false, stale: true, v: r.v, now: Date.now() });
     const prev = await openJ(code, 'state', r.state, {});
-    const state = { track: b.track === undefined ? prev.track : cleanTrack(b.track), playing: !!b.playing, pos: Math.max(0, +b.pos || 0), at: Date.now(), by: me.username };
+    // "at" = instante (hora del servidor) en que quien manda midió la posición; si su reloj no
+    // parece fiable, la hora de llegada
+    const now = Date.now(), posAt = +b.posAt;
+    const at = posAt && Math.abs(posAt - now) < 5000 ? Math.min(posAt, now) : now;
+    const state = { track: b.track === undefined ? prev.track : cleanTrack(b.track), playing: !!b.playing, pos: Math.max(0, +b.pos || 0), at, by: me.username };
     await db.batch([
-      db.prepare('UPDATE rooms SET state = ?, v = v + 1, updated = ? WHERE code = ?').bind(await sealJ(code, 'state', state), Date.now(), code),
+      db.prepare('UPDATE rooms SET state = ?, v = v + 1, updated = ? WHERE code = ?').bind(await sealJ(code, 'state', state), now, code),
       touchStmt(db, code, me)
     ]);
+    notify(code, { t: 'state', state, v: r.v + 1 });
     return json(200, { ok: true, v: r.v + 1, now: Date.now() });
   }
   // ---- cola compartida
   if (act === 'queue' || act === 'suggest') {
     if (!conf.guestsAdd && !await canControl(db, code, me, r.host_id, conf)) return err(403, 'El anfitrión no deja añadir canciones');
     const e = await addToQueue(db, code, me, (await body()).track);
+    if (!e) notify(code, { t: 'refresh' });
     return e || view();
   }
   if (act === 'queue/remove') {
@@ -236,6 +265,7 @@ export async function handleRooms(request, env, path) {
     if (!row) return view();
     if (row.user_id !== me.id && !await canControl(db, code, me, r.host_id, conf)) return err(403, 'Solo puedes quitar tus canciones');
     await db.prepare('DELETE FROM room_queue WHERE id = ?').bind(+b.qid).run();
+    notify(code, { t: 'refresh' });
     return view();
   }
   if (act === 'queue/pop') {
@@ -243,6 +273,7 @@ export async function handleRooms(request, env, path) {
     const row = await db.prepare('SELECT id, user_name, track FROM room_queue WHERE code = ? ORDER BY id LIMIT 1').bind(code).first();
     if (!row) return json(200, { track: null });
     await db.prepare('DELETE FROM room_queue WHERE id = ?').bind(row.id).run();
+    notify(code, { t: 'refresh' });
     return json(200, { track: await openJ(code, 'queue', row.track), by: row.user_name });
   }
   // ---- reacciones y chat (con un límite para que nadie inunde la sala)
@@ -265,11 +296,12 @@ export async function handleRooms(request, env, path) {
     const b = await body();
     const next = { guestsAdd: b.guestsAdd === undefined ? conf.guestsAdd : !!b.guestsAdd, guestsControl: b.guestsControl === undefined ? conf.guestsControl : !!b.guestsControl };
     await db.prepare('INSERT INTO room_conf (code, conf) VALUES (?, ?) ON CONFLICT(code) DO UPDATE SET conf = excluded.conf').bind(code, JSON.stringify(next)).run();
+    notify(code, { t: 'refresh' });
     return view();
   }
   if (act === 'leave') {
-    if (host) await dropRoom(db, code);   // los bloqueos de "todas tus salas" se quedan
-    else await db.prepare('DELETE FROM room_members WHERE code = ? AND user_id = ?').bind(code, me.id).run();
+    if (host) { await dropRoom(db, code); notify(code, { t: 'closed' }); }   // los bloqueos de "todas tus salas" se quedan
+    else { await db.prepare('DELETE FROM room_members WHERE code = ? AND user_id = ?').bind(code, me.id).run(); notify(code, { t: 'refresh' }); }
     return json(200, { ok: true });
   }
   return err(405, 'Método no permitido');

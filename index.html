@@ -521,6 +521,18 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
 .room-join{display:flex;gap:8px;width:100%}
 .room-join input{flex:1;min-width:0;height:52px;border-radius:14px;border:1px solid var(--outline);background:transparent;padding:0 16px;font-size:22px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;text-align:center;color:var(--fg);outline:0}
 .room-join input:focus{border:2px solid var(--primary)}
+/* sala: estado de la sincronía y retraso de los auriculares */
+.room-sync{align-self:stretch;display:flex;flex-direction:column;gap:6px;padding:10px 14px;border-radius:18px;background:var(--surface-c-high);text-align:left}
+.rs-row{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+.rs-dot{width:10px;height:10px;border-radius:50%;background:#f59e0b;flex:none}
+.room-sync.ok .rs-dot{background:#22c55e}
+.rs-txt{flex:1;min-width:0}
+.rs-mode{font-size:12px;font-weight:500;color:var(--fg2)}
+.rs-bt{display:flex;align-items:center;gap:6px;font-size:13.5px}
+.rs-bt span{flex:1}
+.rs-bt .icb{width:34px;height:34px;font-size:20px;font-weight:700;background:var(--surface-c-highest);color:var(--fg)}
+.rs-val{min-width:52px;text-align:center;font-variant-numeric:tabular-nums}
+.rs-hint{margin:0 !important;font-size:12.5px}
 /* sala estilo Jam: reacciones, cola compartida y chat */
 .room-sheet .rp-sec{align-self:stretch;text-align:left}
 .room-react{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;align-self:stretch}

@@ -34,12 +34,70 @@ const Together = (() => {
   const isMe = name => String(name || '').toLowerCase() === me();
   const KEY = 'mz:room';
 
+  /* Reloj: cada respuesta del servidor (y cada "pong" del tiempo real) da una medida de la
+     diferencia entre su hora y la nuestra, con un error de hasta medio viaje. Se guardan las
+     últimas y se usa la del viaje más corto, que es la más exacta (como hacen los relojes por
+     internet). */
+  const samples = [];
+  function clockSample(rtt, off) {
+    if (!(rtt >= 0) || !isFinite(off)) return;
+    samples.push({ rtt, off, t: Date.now() });
+    while (samples.length > 16) samples.shift();
+    const fresh = samples.filter(s => Date.now() - s.t < 120e3);
+    const best = (fresh.length ? fresh : samples).reduce((a, b) => b.rtt < a.rtt ? b : a);
+    offset = best.off;
+  }
+  const serverNow = () => Date.now() + offset;
   async function api(method, path, body) {
     const t0 = Date.now();
     const r = await fetch('/api/' + path, { method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+    const t1 = Date.now();
     let j = null; try { j = await r.json(); } catch (_) {}
-    if (j && j.now) offset = j.now - (t0 + Date.now()) / 2;        // reloj del servidor (con la mitad del viaje)
+    if (j && j.now) clockSample(t1 - t0, j.now - (t0 + t1) / 2);
     return { ok: r.ok, status: r.status, j };
+  }
+
+  /* ---------------------------------------------------------------- tiempo real (WebSocket)
+     Con él, los cambios llegan al momento y el reloj es mucho más preciso; si no se puede
+     conectar, todo sigue funcionando consultando cada 1,5 s. */
+  let ws = null, wsTry = 0, wsT = 0, pingT = 0, pollTimer = 0;
+  const live = () => !!(ws && ws.readyState === 1);
+  function connectWs() {
+    if (!room || !('WebSocket' in window)) return;
+    clearTimeout(wsT);
+    const code = room.code;
+    let sock;
+    try { sock = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/room/${code}/ws`); } catch (_) { return; }
+    ws = sock;
+    const ping = () => { if (sock.readyState === 1) sock.send(JSON.stringify({ t: 'ping', c: Date.now() })); };
+    sock.onopen = () => {
+      wsTry = 0;
+      [0, 250, 600, 1200].forEach(d => setTimeout(ping, d));   // varias medidas del reloj al conectar
+      clearInterval(pingT); pingT = setInterval(ping, 10000);
+      renderSync(); schedulePoll();
+    };
+    sock.onmessage = e => {
+      let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+      if (!room || room.code !== code) return;
+      if (m.t === 'pong') clockSample(Date.now() - m.c, m.s - (m.c + Date.now()) / 2);
+      else if (m.t === 'state') onState(m.state, m.v);
+      else if (m.t === 'event') { handleEvents([m.e]); if (m.e.id > lastEvent) lastEvent = m.e.id; }
+      else if (m.t === 'refresh') poll();
+      else if (m.t === 'closed') { leave(true); toast('La sala se ha cerrado'); }
+    };
+    sock.onclose = () => {
+      clearInterval(pingT);
+      if (ws === sock) ws = null;
+      renderSync();
+      if (room && room.code === code) { wsT = setTimeout(connectWs, Math.min(15000, 1000 * 2 ** wsTry++)); schedulePoll(); }
+    };
+    sock.onerror = () => { try { sock.close(); } catch (_) {} };
+  }
+  // consultas de la sala: cada 1,5 s sin tiempo real; cada 5 s con él (solo para personas y cola)
+  function schedulePoll() {
+    clearTimeout(pollTimer);
+    if (!room) return;
+    pollTimer = setTimeout(async () => { await poll(); schedulePoll(); }, live() ? 5000 : 1500);
   }
   const available = () => !!(window.Account && Account.supported === true && Account.user);
   // a la sala se publica el id con el que llegó la canción (no la versión que suene aquí)
@@ -71,6 +129,7 @@ const Together = (() => {
   function enter(rm, joining) {
     room = { code: rm.code, isHost: rm.isHost, isAdmin: !!rm.isAdmin, control: !!rm.control, host: rm.host };
     lastV = rm.v || 0;
+    lastState = rm.state || null; drift = null; settle = null;
     needSync = !!joining; hold = false; hintAt = 0; lastTrackId = '';
     chat = []; lastEvent = rm.lastEvent || 0;
     (rm.events || []).forEach(e => { if (e.kind === 'chat') chat.push(e); });
@@ -79,14 +138,18 @@ const Together = (() => {
     document.querySelectorAll('[data-together]').forEach(b => b.setAttribute('aria-label', 'Escuchar juntos: estás en una sala'));
     renderBar(rm);
     clearInterval(pollT); clearInterval(beatT);
-    pollT = setInterval(poll, 1500);
+    schedulePoll();
+    connectWs();
+    // quien escucha (no manda) revisa cada 2 s si va a la par, aunque no lleguen cambios
+    pollT = setInterval(() => { if (room && !canCtl() && !hold && lastState && lastState.playing) { correct(lastState); renderSync(); } }, 2000);
     if (room.isHost) beatT = setInterval(() => push(true, true), 8000);
   }
   async function leave(silent) {
     if (!room) return;
     const code = room.code, host = room.isHost;
-    clearInterval(pollT); clearInterval(beatT);
-    room = null; lastRoom = null; chat = [];
+    clearInterval(pollT); clearInterval(beatT); clearTimeout(pollTimer); clearTimeout(wsT); clearInterval(pingT);
+    room = null; lastRoom = null; lastState = null; chat = [];
+    if (ws) { const s = ws; ws = null; try { s.close(1000, 'salir'); } catch (_) {} }
     try { localStorage.removeItem(KEY); } catch (_) {}
     document.body.classList.remove('in-room');
     document.querySelectorAll('[data-together]').forEach(b => b.setAttribute('aria-label', 'Escuchar juntos'));
@@ -111,7 +174,10 @@ const Together = (() => {
     clearTimeout(pushT);
     const send = () => {
       if (!canCtl()) return;
-      api('POST', `room/${room.code}/state`, { track: trackOf(App.current), playing: App.state.playing, pos: Player.time(), beat: !!beat, baseV: lastV })
+      // la posición va con el instante exacto (hora del servidor) en que se midió; si los
+      // auriculares van con retraso, lo que se oye va ese tanto por detrás
+      const pos = Math.max(0, Player.time() - (App.state.playing ? btDelay() : 0)), posAt = serverNow();
+      api('POST', `room/${room.code}/state`, { track: trackOf(App.current), playing: App.state.playing, pos, posAt, beat: !!beat, baseV: lastV })
         .then(r => { if (r.ok && r.j && r.j.ok !== false && r.j.v) lastV = r.j.v; }).catch(() => {});
     };
     now ? send() : (pushT = setTimeout(send, 250));
@@ -138,13 +204,21 @@ const Together = (() => {
     handleEvents(rm.events || []);
     if (rm.lastEvent > lastEvent) lastEvent = rm.lastEvent;
     renderBar(rm);
-    // quien maneja la música se ajusta a los cambios de los demás (y, al entrar, hasta quedar al
-    // día); los invitados, siempre
-    const fresh = rm.v > lastV;
-    if (fresh) lastV = rm.v;
-    const st = rm.state;
+    onState(rm.state, rm.v);
+    // sala sin nada sonando y con canciones en la cola: el anfitrión empieza
+    if (room.isHost && !App.current && rm.queue && rm.queue.length) popAndPlay(false);
+  }
+
+  // lo que suena en la sala: llega por tiempo real (al momento) o en cada consulta
+  let lastState = null;
+  function onState(st, v) {
+    if (!room || !st || (v && v < lastV)) return;           // uno más viejo que el que ya tenemos
+    const fresh = v > lastV;
+    if (fresh) lastV = v;
+    lastState = st;
+    if (lastRoom) lastRoom.state = st;
     if (canCtl()) {
-      const other = st && st.by && !isMe(st.by);
+      const other = st.by && !isMe(st.by);
       // tras aplicar un cambio de otro, el latido del anfitrión se calla hasta que este dispositivo
       // esté de verdad al día: si no, mientras carga la canción nueva publicaría la vieja o el
       // segundo 0 y desharía el cambio
@@ -153,8 +227,7 @@ const Together = (() => {
       if (needSync && inSync(st)) needSync = false;
     } else apply(st);
     hintPlay(st);
-    // sala sin nada sonando y con canciones en la cola: el anfitrión empieza
-    if (room.isHost && !App.current && rm.queue && rm.queue.length) popAndPlay(false);
+    renderSync();
   }
 
   /* ---------------------------------------------------------------- eventos: reacciones, chat, canciones añadidas */
@@ -242,7 +315,13 @@ const Together = (() => {
   }
 
   /* ---------------------------------------------------------------- sincronizarse con la sala */
-  const expectedPos = st => st.pos + (st.playing ? (Date.now() + offset - st.at) / 1000 : 0);
+  // retraso de los auriculares de este dispositivo (Bluetooth suele ir 0,1–0,3 s tarde): se toca
+  // ese tanto por delante para que lo que se OYE vaya a la vez que los demás
+  const btDelay = () => { try { return Math.max(0, Math.min(.8, +localStorage.getItem('mz:btDelay') || 0)); } catch (_) { return 0; } };
+  // cuánto tarda este dispositivo en dar un salto (se aprende solo y se guarda)
+  let seekLead = (() => { try { return Math.max(0, Math.min(.6, +localStorage.getItem('mz:seekLead') || .12)); } catch (_) { return .12; } })();
+  let lastSeekAt = 0, settle = null, drift = null;
+  const expectedPos = st => st.pos + (st.playing ? (serverNow() - st.at) / 1000 + btDelay() : 0);
   // la misma canción aunque en este dispositivo suene otra versión (si la original no se podía
   // reproducir aquí, la app prueba otra y cambia el id)
   const sameTrack = (cur, st) => {
@@ -281,16 +360,40 @@ const Together = (() => {
         } else { s.queue = [{ ...st.track, atv: true, roomId: st.track.id }]; s.index = 0; s.from = 'Sala ' + room.code; }
         App.start(Math.max(0, expected + .5), st.playing);                                  // +0,5 s: lo que tarda en cargar
         App.saveQueue && App.saveQueue();
+        settle = st.track.id;            // cuando empiece a sonar de verdad, se ajusta al segundo exacto
         return;
       }
       if (!Player.ready) return;
       if (st.playing !== App.state.playing) quietUntil = Date.now() + 1500;
       if (st.playing && !App.state.playing) Player.play();
       if (!st.playing && App.state.playing) Player.pause();
-      // sonando: se corrige si se desvía más de 1 s; en pausa, se queda en el segundo exacto
-      const drift = Player.time() - expected;
-      if (Math.abs(drift) > (st.playing ? 1 : .4)) { quietUntil = Date.now() + 1500; Player.seek(Math.max(0, expected)); }
+      correct(st);
     } finally { applying = false; }
+  }
+  /* Corrección fina: sonando, a partir de 0,35 s de diferencia (o 1,5 s si acaba de corregir, para
+     que no se oigan saltos seguidos); en pausa, 0,25 s. El salto va un poco por delante (lo que
+     tarda este dispositivo en saltar) y, a los 2,5 s, se mira cuánto se ha quedado y se aprende. */
+  function correct(st, force) {
+    if (!Player.ready || !sameTrack(App.current, st)) return;
+    const exp = expectedPos(st);
+    drift = Player.time() - exp;
+    const recent = Date.now() - lastSeekAt < 4000;
+    const limit = !st.playing ? .25 : force ? .15 : recent ? 1.5 : .35;
+    if (Math.abs(drift) <= limit) return;
+    quietUntil = Date.now() + 1500;
+    lastSeekAt = Date.now();
+    const was = applying;
+    applying = true;
+    try { Player.seek(Math.max(0, exp + (st.playing ? seekLead : 0))); } finally { applying = was; }
+    if (st.playing) setTimeout(() => {
+      if (!room || !lastState || !sameTrack(App.current, lastState) || !App.state.playing) return;
+      const d = Player.time() - expectedPos(lastState);
+      if (Math.abs(d) < 1.5) {
+        seekLead = Math.max(0, Math.min(.6, seekLead - d * .6));
+        try { localStorage.setItem('mz:seekLead', seekLead.toFixed(3)); } catch (_) {}
+      }
+      drift = d; renderSync();
+    }, 2500);
   }
 
   /* ---------------------------------------------------------------- invitado: controles */
@@ -414,6 +517,36 @@ const Together = (() => {
       box.appendChild(row);
     });
   }
+  /* Estado de la sincronía (si vas a la par) y el ajuste del retraso de los auriculares */
+  const fmtS = s => s.toFixed(2).replace('.', ',');
+  function renderSync(root) {
+    const box = (root || document).querySelector(root ? '.room-sync' : '#sheet .room-sync');
+    if (!box || !room) return;
+    const st = lastState, delay = btDelay();
+    let status;
+    if (hold) status = 'En pausa solo para ti';
+    else if (!st || !st.track) status = 'Nada sonando';
+    else if (!App.state.playing && st.playing) status = 'Toca ▶ para escuchar';
+    else if (drift == null || Math.abs(drift) > .35) status = 'Ajustando…';
+    else status = `Sincronizado · ±${fmtS(Math.abs(drift))} s`;
+    const ok = /^Sincronizado/.test(status);
+    if (!box.firstChild) {
+      box.innerHTML = `<div class="rs-row"><span class="rs-dot" aria-hidden="true"></span><span class="rs-txt"></span><span class="rs-mode"></span></div>
+        <div class="rs-bt"><span>Retraso de tus auriculares</span><button class="icb" type="button" data-bt="-1" aria-label="Menos retraso">−</button><b class="rs-val"></b><button class="icb" type="button" data-bt="1" aria-label="Más retraso">+</button></div>
+        <p class="muted rs-hint">Si con auriculares Bluetooth oyes la música un poco tarde respecto a los demás, súbelo.</p>`;
+      box.querySelectorAll('[data-bt]').forEach(x => x.onclick = () => {
+        const v = Math.max(0, Math.min(.8, Math.round((btDelay() + +x.dataset.bt * .05) * 100) / 100));
+        try { localStorage.setItem('mz:btDelay', String(v)); } catch (_) {}
+        if (lastState) correct(lastState, true);
+        if (canCtl()) push(true);
+        renderSync();
+      });
+    }
+    box.classList.toggle('ok', ok);
+    box.querySelector('.rs-txt').textContent = status;
+    box.querySelector('.rs-mode').textContent = live() ? 'Tiempo real' : 'Conexión normal';
+    box.querySelector('.rs-val').textContent = fmtS(delay) + ' s';
+  }
   function renderChat(root) {
     const box = (root || document).querySelector(root ? '.room-chat-log' : '#sheet .room-chat-log');
     if (!box) return;
@@ -461,6 +594,7 @@ const Together = (() => {
         const b = el(`<div class="room-sheet" data-code="${esc(room.code)}">
           <div class="room-code" aria-label="Código de la sala">${room.code.split('').map(c => `<span>${c}</span>`).join('')}</div>
           <div class="acct-actions"><button class="btn tonal" data-r="leave" type="button">${room.isHost ? 'Cerrar sala' : 'Salir'}</button><button class="btn" data-r="invite" type="button">${icon('link')}Invitar</button></div>
+          <div class="room-sync" aria-live="polite"></div>
           <div class="room-react" role="group" aria-label="Reacciones">${EMOJIS.map(e => `<button type="button" data-e="${e}" aria-label="Reaccionar con ${e}">${e}</button>`).join('')}</div>
           <p class="rp-sec">Cola de la sala</p>
           <div class="room-queue"></div>
@@ -482,6 +616,7 @@ const Together = (() => {
         renderQueue(b.querySelector('.room-queue'));
         renderConf(b.querySelector('.room-conf'));
         renderChat(b);
+        renderSync(b);
       }
     });
   }
@@ -545,6 +680,12 @@ const Together = (() => {
       const r = up.apply(this, a);
       const now = Date.now();
       if (room && canCtl() && (now - intentAt < 4000 || now - trackAt < 8000)) push();
+      // la canción de la sala acaba de empezar a sonar de verdad: ajuste fino al segundo exacto
+      // (en vez de fiarse de lo que se suponía que iba a tardar en cargar)
+      if (room && settle && App.state.playing && lastState && lastState.track && lastState.track.id === settle) {
+        settle = null;
+        setTimeout(() => { if (room && lastState && App.state.playing) correct(lastState, true); }, 400);
+      }
       return r;
     };
   }

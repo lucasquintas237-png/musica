@@ -15,6 +15,11 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "musica-db" }
   ],
+  // salas en tiempo real: un Durable Object por sala (server/hub.js), gratis con SQLite
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "RoomHub" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomHub"] }],
   // Secreto DATA_KEY (NO va aquí ni en el código): clave con la que se cifran los datos de las
   // cuentas y se protegen las contraseñas (server/crypto.js). Se pone en el panel de Cloudflare:
   // Workers & Pages > musica > Settings > Variables and Secrets > Add > tipo "Secret".
