@@ -100,6 +100,12 @@ export async function handleRooms(request, env, path) {
 
   if (path === 'room' && m === 'POST') {
     const b = await body();
+    // una sala por anfitrión: al crear otra se cierran las anteriores (evita llenar la base de datos)
+    const old = await db.prepare('SELECT code FROM rooms WHERE host_id = ?').bind(me.id).all();
+    for (const o of old.results || []) {
+      await db.batch(['room_members', 'room_suggest', 'room_admins'].map(t => db.prepare(`DELETE FROM ${t} WHERE code = ?`).bind(o.code))
+        .concat([db.prepare("DELETE FROM room_bans WHERE code = ? AND code <> ''").bind(o.code), db.prepare('DELETE FROM rooms WHERE code = ?').bind(o.code)]));
+    }
     for (let tries = 0; tries < 5; tries++) {
       const code = Array.from(crypto.getRandomValues(new Uint8Array(6)), x => ALPHA[x % ALPHA.length]).join('');
       const state = { track: cleanTrack(b.track), playing: !!b.playing, pos: +b.pos || 0, at: Date.now() };

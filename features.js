@@ -566,7 +566,7 @@ const Features = (() => {
         if (!pl) return history.back();
         listPage(box, {
           name: pl.name, tracks: pl.tracks, cover: pl.cover, playlistId: pid, rerender: render,
-          sub: pl.tracks.length + ' canciones' + (pl.source ? ' · importada de ' + pl.source : ''),
+          sub: esc(pl.tracks.length + ' canciones' + (pl.source ? ' · importada de ' + pl.source : '')),
           actions: [
             { icon: 'link', label: 'Compartir', tonal: true, fn: () => window.Share && Share.share(pl.name, pl.tracks) },
             { icon: 'queue', label: 'A la cola', tonal: true, fn: () => App.addToQueue(pl.tracks) },

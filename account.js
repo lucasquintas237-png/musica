@@ -136,7 +136,8 @@ const Account = (() => {
       renderAll();
       if (await pull()) refreshUI();
     } else {
-      if (who) { toast('La sesión ha caducado. Vuelve a entrar.'); return switchTo(''); }
+      // sesión cerrada (caducada, o cerrada desde otro dispositivo): fuera también la copia local
+      if (who) { wipeLocal(who); toast('La sesión ha caducado. Vuelve a entrar.'); return switchTo(''); }
       renderAll();
       showGate('login');                    // sin sesión no se puede usar la app
     }
@@ -159,10 +160,47 @@ const Account = (() => {
     switchTo(name);
   }
 
-  async function logout() {
+  // al cerrar sesión se borra la copia local de los datos de la cuenta (están en el servidor):
+  // así nadie que use después este dispositivo puede verlos
+  function wipeLocal(name) {
+    const ns = nsOf(name);
+    try { Object.keys(localStorage).filter(k => k.startsWith(ns)).forEach(k => localStorage.removeItem(k)); } catch (_) {}
+  }
+  async function logout(all) {
     await flush();
-    try { await api('POST', 'auth/logout'); } catch (_) {}
+    try { await api('POST', all ? 'auth/logout-all' : 'auth/logout'); } catch (_) {}
+    if (user) wipeLocal(user);
     switchTo('');
+  }
+  function changePassword() {
+    App.sheet({
+      title: 'Cambiar contraseña', sub: 'Se cerrará la sesión en tus otros dispositivos',
+      body: box => {
+        const f = el(`<form class="acct-form">
+          <label><span>Contraseña actual</span><input type="password" name="current" autocomplete="current-password" required maxlength="200"></label>
+          <label><span>Contraseña nueva</span><input type="password" name="next" autocomplete="new-password" required minlength="8" maxlength="200"></label>
+          <label><span>Repite la nueva</span><input type="password" name="again" autocomplete="new-password" required minlength="8" maxlength="200"></label>
+          <p class="acct-err" role="alert" hidden></p>
+          <div class="acct-actions"><button type="button" class="btn tonal" data-cancel>Cancelar</button><button class="btn" type="submit">Cambiar</button></div></form>`);
+        const errBox = f.querySelector('.acct-err');
+        f.querySelector('[data-cancel]').onclick = () => App.closeSheet();
+        f.onsubmit = async e => {
+          e.preventDefault();
+          errBox.hidden = true;
+          if (f.next.value !== f.again.value) { errBox.textContent = 'Las dos contraseñas nuevas no coinciden'; errBox.hidden = false; return; }
+          const r = await api('POST', 'auth/password', { current: f.current.value, next: f.next.value }).catch(() => null);
+          if (!r || !r.ok) { errBox.textContent = (r && r.j && r.j.error) || 'No se pudo conectar con el servidor'; errBox.hidden = false; return; }
+          App.closeSheet(); toast('Contraseña cambiada. Tus otros dispositivos tendrán que volver a entrar', 4000);
+        };
+        box.appendChild(f);
+      }
+    });
+  }
+  function logoutAllAsk() {
+    App.sheet({
+      title: '¿Cerrar sesión en todos los dispositivos?', sub: 'También en este. Tendrás que volver a entrar en cada uno',
+      items: [{ icon: 'back', label: 'Cerrar sesión en todos', fn: () => logout(true) }]
+    });
   }
 
   /* ---------------------------------------------------------------- interfaz */
@@ -173,13 +211,13 @@ const Account = (() => {
     const reg = mode === 'register';
     const f = el(`<form class="acct-form" autocomplete="on">
           <label><span>Nombre de usuario</span><input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="24" required></label>
-          <label><span>Contraseña</span><input type="password" name="password" autocomplete="${reg ? 'new-password' : 'current-password'}" minlength="${reg ? 6 : 1}" maxlength="200" required></label>
+          <label><span>Contraseña</span><input type="password" name="password" autocomplete="${reg ? 'new-password' : 'current-password'}" minlength="${reg ? 8 : 1}" maxlength="200" required></label>
           <p class="acct-err" role="alert" hidden></p>
           <div class="acct-actions">
             <button type="button" class="btn tonal" data-switch>${reg ? 'Ya tengo cuenta' : 'Crear una cuenta'}</button>
             <button class="btn" type="submit">${reg ? 'Crear cuenta' : 'Entrar'}</button>
           </div>
-          ${reg ? '<p class="acct-note">De 3 a 24 caracteres: letras, números, punto, guion o guion bajo. La contraseña, de al menos 6. No hay forma de recuperarla, así que apúntala.</p>' : ''}
+          ${reg ? '<p class="acct-note">De 3 a 24 caracteres: letras, números, punto, guion o guion bajo. La contraseña, de al menos 8 (mejor una frase larga). No hay forma de recuperarla, así que apúntala.</p>' : ''}
         </form>`);
     const errBox = f.querySelector('.acct-err'), btn = f.querySelector('[type=submit]');
     f.querySelector('[data-switch]').onclick = () => onSwitch(reg ? 'login' : 'register');
@@ -239,7 +277,11 @@ const Account = (() => {
     if (!user) return openSheet('login');
     App.sheet({
       title: user, sub: 'Tu música se guarda en tu cuenta', origin,
-      items: [{ icon: 'back', label: 'Cerrar sesión', fn: () => logout() }]
+      items: [
+        { icon: 'key', label: 'Cambiar contraseña', fn: () => changePassword() },
+        { icon: 'back', label: 'Cerrar sesión', fn: () => logout() },
+        { icon: 'close', label: 'Cerrar sesión en todos los dispositivos', fn: () => logoutAllAsk() }
+      ]
     });
   }
 
@@ -253,8 +295,12 @@ const Account = (() => {
     if (user) {
       box.innerHTML = `<h2 class="sec">Cuenta</h2><div class="group">
         <div class="set" style="cursor:default"><span class="acct-avatar" aria-hidden="true">${initial(user)}</span><div class="lbl">${esc(user)}<small>Favoritas, listas, historial y búsquedas se guardan en tu cuenta y se sincronizan entre dispositivos</small></div></div>
-        <div class="set" data-acct="logout">${icon('back')}<div class="lbl">Cerrar sesión</div></div></div>`;
+        <div class="set" data-acct="password">${icon('key')}<div class="lbl">Cambiar contraseña<small>Se cerrará la sesión en tus otros dispositivos</small></div></div>
+        <div class="set" data-acct="logout">${icon('back')}<div class="lbl">Cerrar sesión<small>Se borra la copia de tus datos de este dispositivo</small></div></div>
+        <div class="set" data-acct="logout-all">${icon('close')}<div class="lbl">Cerrar sesión en todos los dispositivos</div></div></div>`;
       box.querySelector('[data-acct=logout]').onclick = () => logout();
+      box.querySelector('[data-acct=password]').onclick = () => changePassword();
+      box.querySelector('[data-acct=logout-all]').onclick = () => logoutAllAsk();
     } else {
       box.innerHTML = `<h2 class="sec">Cuenta</h2><div class="group">
         <div class="set" data-acct="login">${icon('person')}<div class="lbl">Iniciar sesión<small>Tu propio inicio, historial y búsquedas, en cualquier dispositivo</small></div></div>

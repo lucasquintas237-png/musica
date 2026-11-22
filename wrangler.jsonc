@@ -15,5 +15,9 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "musica-db" }
   ],
+  // Secreto DATA_KEY (NO va aquí ni en el código): clave con la que se cifran los datos de las
+  // cuentas y se protegen las contraseñas (server/crypto.js). Se pone en el panel de Cloudflare:
+  // Workers & Pages > musica > Settings > Variables and Secrets > Add > tipo "Secret".
+  // Una vez puesto, no lo cambies ni lo borres: sin él no se pueden leer los datos ni entrar.
   "observability": { "enabled": true }
 }

@@ -18,7 +18,12 @@ const text = (status, body) => new Response(body, { status, headers: { 'Content-
 async function pass(upstream, cache) {
   const r = await upstream;
   const h = new Headers();
-  h.set('Content-Type', r.headers.get('Content-Type') || 'application/octet-stream');
+  // páginas de otras webs (Apple, Spotify) se devuelven como texto: la app solo las lee, y así
+  // nunca pueden ejecutarse como página dentro de nuestro dominio
+  let type = r.headers.get('Content-Type') || 'application/octet-stream';
+  if (/html|xml|javascript|svg/i.test(type)) type = 'text/plain; charset=utf-8';
+  h.set('Content-Type', type);
+  h.set('Content-Security-Policy', "default-src 'none'; sandbox");
   h.set('Cache-Control', r.ok ? cache : 'no-cache');
   let status = r.status;
   if (![200, 204, 400, 403, 404, 500].includes(status)) status = 502;
@@ -93,6 +98,7 @@ export async function onRequest({ request, params }) {
 
     return text(404, 'api');
   } catch (e) {
-    return text(502, String(e && e.message || e));
+    console.error('proxy', path, e);
+    return text(502, 'No se pudo conectar con el servicio');
   }
 }

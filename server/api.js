@@ -10,7 +10,8 @@
    API pública: Authorization: Bearer ms_...   (ver GET /api/v1 para la lista)
    En la base de datos solo se guarda el SHA-256 de cada token. Permisos: "read" (leer) o
    "control" (leer, cambiar la biblioteca y manejar la reproducción). */
-import { schema, currentUser } from './accounts.js';
+import { schema, currentUser, readData, writeData } from './accounts.js';
+import { seal, open } from './crypto.js';
 import * as Y from './ytm.js';
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Max-Age': '86400' };
@@ -44,18 +45,10 @@ function cleanTrack(t) {
   return { id: t.id, title: s(t.title, 200), artist: s(t.artist, 200), artistId: s(t.artistId, 64), album: s(t.album, 200), albumId: s(t.albumId, 64), dur: +t.dur || 0, cover: s(t.cover, 500) };
 }
 
-/* ---------------------------------------------------------------- datos de la cuenta */
-async function getData(db, uid, key, def) {
-  const r = await db.prepare('SELECT value FROM userdata WHERE user_id = ? AND key = ?').bind(uid, key).first();
-  if (!r) return def;
-  try { return JSON.parse(r.value); } catch (_) { return def; }
-}
-async function setData(db, uid, key, value) {
-  const v = JSON.stringify(value);
-  if (v.length > MAX_VALUE) throw Object.assign(new Error('Demasiados datos'), { status: 413 });
-  await db.prepare('INSERT INTO userdata (user_id, key, value, updated) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated = excluded.updated')
-    .bind(uid, key, v, Date.now()).run();
-}
+/* ---------------------------------------------------------------- datos de la cuenta (cifrados, ver accounts.js) */
+let ENV = null;   // el entorno de la petición en curso (para las claves de cifrado)
+const getData = (db, uid, key, def) => readData(ENV, db, uid, key, def);
+const setData = (db, uid, key, value) => writeData(ENV, db, uid, key, value);
 // datos de una canción a partir de su id (si la API solo recibe el id)
 async function trackOf(b) {
   const t = cleanTrack(b.track) || (isVid(b.id) ? cleanTrack(b) : null);
@@ -71,7 +64,8 @@ async function nowPlaying(db, uid) {
   const r = await db.prepare('SELECT device, state, updated FROM presence WHERE user_id = ?').bind(uid).first();
   const now = Date.now();
   if (!r) return { online: false, playing: false, track: null };
-  const st = JSON.parse(r.state);
+  let st;
+  try { st = JSON.parse(await open(ENV, uid + ':presence', r.state)); } catch (_) { return { online: false, playing: false, track: null }; }
   const online = !st.closed && now - r.updated < ONLINE;
   const playing = online && !!st.playing;
   let pos = +st.pos || 0;
@@ -271,7 +265,9 @@ async function app(request, db, path) {
 
   if (path === 'tokens' && m === 'GET') {
     const { results } = await db.prepare('SELECT id, name, hint, scope, created, last_used FROM api_tokens WHERE user_id = ? ORDER BY id DESC').bind(me.id).all();
-    return json(200, { tokens: results || [] });
+    const tokens = [];
+    for (const t of results || []) { try { t.name = await open(ENV, me.id + ':token', t.name); } catch (_) { t.name = 'Token'; } tokens.push(t); }
+    return json(200, { tokens });
   }
   if (path === 'tokens' && m === 'POST') {
     const b = await body(request);
@@ -282,7 +278,7 @@ async function app(request, db, path) {
     const token = 'ms_' + hex(crypto.getRandomValues(new Uint8Array(20)));
     const hint = token.slice(0, 7) + '…' + token.slice(-4);
     const r = await db.prepare('INSERT INTO api_tokens (user_id, name, hash, hint, scope, created) VALUES (?, ?, ?, ?, ?, ?) RETURNING id')
-      .bind(me.id, name, await sha256(token), hint, scope, Date.now()).first();
+      .bind(me.id, await seal(ENV, me.id + ':token', name), await sha256(token), hint, scope, Date.now()).first();
     return json(200, { token, id: r.id, name, hint, scope });
   }
   const td = path.match(/^tokens\/(\d+)$/);
@@ -298,13 +294,14 @@ async function app(request, db, path) {
     // si otra app está sonando ahora mismo, una que solo está abierta (en pausa) no le quita el sitio
     const cur = await db.prepare('SELECT device, state, updated FROM presence WHERE user_id = ?').bind(me.id).first();
     if (cur && cur.device !== device && !b.playing && Date.now() - cur.updated < ONLINE) {
-      const cs = JSON.parse(cur.state);
+      let cs = {};
+      try { cs = JSON.parse(await open(ENV, me.id + ':presence', cur.state)); } catch (_) {}
       if (cs.playing && !cs.closed) return json(200, { ok: true, active: false });
     }
     if (b.closed && cur && cur.device !== device) return json(200, { ok: true, active: false });
     const state = { track: cleanTrack(b.track), playing: !!b.playing, pos: Math.max(0, +b.pos || 0), at: Date.now(), volume: b.volume == null ? null : +b.volume, shuffle: !!b.shuffle, repeat: s(b.repeat, 4), deviceName: s(b.deviceName, 40), closed: !!b.closed };
     await db.prepare('INSERT INTO presence (user_id, device, state, updated) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET device = excluded.device, state = excluded.state, updated = excluded.updated')
-      .bind(me.id, device, JSON.stringify(state), Date.now()).run();
+      .bind(me.id, device, await seal(ENV, me.id + ':presence', JSON.stringify(state)), Date.now()).run();
     return json(200, { ok: true, active: true });
   }
 
@@ -336,9 +333,12 @@ export async function handleApi(request, env, path) {
   const v = /^v1(\/|$)/.test(path);
   if (!db) return v ? err(501, 'La API necesita la base de datos de Cloudflare', CORS) : err(501, 'Sin base de datos');
   try {
+    ENV = env;
     await schema(db); await apiSchema(db);
     return v ? await v1(request, db, path) : await app(request, db, path);
   } catch (e) {
-    return err(e && e.status || 500, (e && e.status ? '' : 'Error del servidor: ') + (e && e.message || e), v ? CORS : {});
+    if (e && e.status) return err(e.status, e.message, v ? CORS : {});
+    console.error('api', e);
+    return err(500, 'Error del servidor', v ? CORS : {});
   }
 }
