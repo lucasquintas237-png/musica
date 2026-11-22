@@ -758,6 +758,33 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 .is-playing .p-stage::before{animation-play-state:running}
 .p-stage:has(.p-panel:not([hidden]))::before{opacity:0}
 .p-cover{position:relative;z-index:1}
+/* Móvil: la portada y la flor que gira detrás se ajustan al hueco que de verdad queda (ancho y
+   alto), así nunca tapan la cabecera ni el título en móviles pequeños. En pantallas bajas todo
+   se compacta un poco. El diseño es el mismo; solo cambian tamaños y proporciones. */
+@media (max-width:759.98px){
+  #player .p-stage{container-type:size;margin:10px 0 8px}
+  #player .p-cover{width:min(100cqw,46vh,calc(100cqh / 1.1))}
+  #player .p-stage::before{width:min(110cqw,52vh,100cqh)}
+  #player .p-info .t{font-size:clamp(20px,6vw,24px)}
+  #player .p-info .s{font-size:clamp(14px,4.2vw,16px)}
+}
+@media (max-width:759.98px) and (max-height:760px){
+  #player .pin{padding-top:calc(env(safe-area-inset-top,0px) + 4px);padding-bottom:calc(var(--safe-b) + 12px)}
+  .p-top{height:44px}
+  .p-info{margin-top:2px}
+  .p-ctrl{margin:8px 0 6px}
+  .p-ctrl .big.m3-play{width:min(80px,22vw)}
+  .p-ctrl .mid{height:56px}
+  .p-vol{margin-top:2px}
+  .p-tools{margin-top:10px}
+  .p-tools .icb{height:46px}
+}
+@media (max-width:759.98px) and (max-height:640px){
+  .p-ctrl .big.m3-play{width:min(70px,20vw)}
+  .p-ctrl .mid{height:50px}
+  .p-tools .icb{height:42px}
+  #player .times{margin-top:-6px}
+}
 .now-art{position:relative;padding:4%}
 .now-art::before{content:"";position:absolute;inset:0;background:var(--primary-container);clip-path:var(--shape-sunny);opacity:.75;
   animation:spin 50s linear infinite;animation-play-state:paused}
