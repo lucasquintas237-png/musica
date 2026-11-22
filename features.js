@@ -683,7 +683,7 @@ const Features = (() => {
       <div class="group">
         <div class="set" style="cursor:default">${icon('theme')}<div class="lbl">Tema</div>
           <div class="seg" id="seg-theme">${[['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Oscuro']].map(([v, l]) => `<button data-v="${v}" class="${theme === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
-        ${window.I18n ? `<div class="set" data-a="lang">${icon('keyboard')}<div class="lbl">Idioma<small data-no-tr>${esc(I18n.langs[I18n.lang])}</small></div></div>` : ''}
+        ${window.I18n ? `<div class="set" data-a="lang">${icon('flag-' + I18n.lang, 'ic flag')}<div class="lbl">Idioma<small data-no-tr>${esc(I18n.langs[I18n.lang])}</small></div></div>` : ''}
         <div class="set" data-k="dynamic">${icon('palette')}<div class="lbl">Color dinámico<small>Fondo y colores tomados de la portada</small></div>${sw(s.dynamic !== false)}</div>
         <div class="set" data-t="amoled">${icon('theme')}<div class="lbl">Negro puro<small>Fondo totalmente negro en modo oscuro: ahorra batería en pantallas OLED</small></div>${sw(!!s.amoled)}</div>
         <div class="set" data-t="contrast">${icon('info')}<div class="lbl">Alto contraste<small>Textos secundarios y bordes más marcados</small></div>${sw(!!s.contrast)}</div>
@@ -746,7 +746,7 @@ const Features = (() => {
     $$('.set[data-a]', b).forEach(x => x.onclick = () => ({
       timer: () => timerMenu(), 'import-link': () => Sources.importPrompt(), artists: () => window.Welcome && Welcome.open(), stats: () => openStats(),
       export: () => exportData(), import: () => importData(), api: () => Remote.open(),
-      lang: () => App.sheet({ title: 'Idioma', items: Object.entries(I18n.langs).map(([k, v]) => ({ icon: k === I18n.lang ? 'heart-f' : 'note', label: v, fn: () => I18n.set(k) })) }),
+      lang: () => App.sheet({ title: 'Idioma', items: Object.entries(I18n.langs).map(([k, v]) => ({ icon: 'flag-' + k, label: v + (k === I18n.lang ? '  ✓' : ''), fn: () => I18n.set(k) })) }),
       'clear-hist': () => App.sheet({ title: '¿Borrar el historial?', sub: 'Las estadísticas también se reinician', items: [{ icon: 'trash', label: 'Borrar', fn: () => { store.set('history', []); store.set('stats', { plays: {}, days: {}, total: 0 }); toast('Historial borrado'); } }] })
     }[x.dataset.a])());
   }
