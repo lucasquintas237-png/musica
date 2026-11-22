@@ -508,6 +508,7 @@ const I18n = (() => {
     ["Menos retraso", "Menos atraso", "Menys retard", "Atzerapen gutxiago", "Less delay"],
     ["Más retraso", "Máis atraso", "Més retard", "Atzerapen gehiago", "More delay"],
     ["Si con auriculares Bluetooth oyes la música un poco tarde respecto a los demás, súbelo.", "Se con auriculares Bluetooth oes a música un pouco tarde respecto aos demais, sóbeo.", "Si amb auriculars Bluetooth sents la música una mica tard respecte als altres, apuja'l.", "Bluetooth entzungailuekin musika besteak baino pixka bat beranduago entzuten baduzu, igo ezazu.", "If with Bluetooth headphones you hear the music a bit later than the others, turn this up."],
+    ["Activar sonido", "Activar son", "Activa el so", "Aktibatu soinua", "Unmute"],
     ["Aura en la barra", "Aura na barra", "Aura a la barra", "Aura barran", "Bar aura"],
     ["Un borde de luz con los colores de la portada que gira y late al ritmo de la canción", "Un bordo de luz coas cores da portada que xira e latexa ao ritmo da canción", "Una vora de llum amb els colors de la portada que gira i batega al ritme de la cançó", "Azaleko koloreekin argi-ertz bat, abestiaren erritmoan biratzen eta taupadaka", "A ring of light in the cover's colors that spins and pulses to the beat"],
     ["Cristal líquido", "Cristal líquido", "Vidre líquid", "Beira likidoa", "Liquid glass"],

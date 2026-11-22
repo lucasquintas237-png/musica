@@ -350,6 +350,26 @@ input[type=range]::-moz-range-thumb{width:4px;height:40px;border:0;border-radius
 .p-ctrl .mid:active{border-radius:32px;transform:scale(.95)}
 .p-ctrl .mid .ic{width:32px;height:32px}
 .p-vol{display:flex;align-items:center;gap:12px;color:var(--fg2);margin-top:6px}
+/* icono de volumen animado: 0–3 ondas según el volumen, X en silencio; las ondas laten al ritmo */
+.vol-btn{display:grid;place-items:center;width:40px;height:40px;margin:-8px -6px -8px -8px;border-radius:50%;color:inherit;transition:background .2s,transform .2s var(--spring)}
+.vol-btn:hover{background:color-mix(in srgb,var(--fg) 8%,transparent)}
+.vol-btn:active{transform:scale(.88)}
+.vol-ic{width:24px;height:24px;overflow:visible}
+.vol-ic .spk{fill:currentColor;transform-origin:7px 12px;transition:transform .35s var(--spring)}
+.vol-ic .w,.vol-ic .x{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.vol-ic .w{opacity:0;transform:translateX(-3px) scale(.6);transform-origin:12px 12px;transition:opacity .25s,transform .45s var(--spring)}
+.vol-ic .x{opacity:0;transform:scale(.3) rotate(-45deg);transform-origin:18px 12px;transition:opacity .2s,transform .4s var(--spring)}
+.vol-ic[data-l="1"] .w1,.vol-ic[data-l="2"] .w1,.vol-ic[data-l="2"] .w2,.vol-ic[data-l="3"] .w{opacity:1;transform:none}
+.vol-ic[data-l="0"] .x{opacity:1;transform:none}
+.vol-ic[data-l="0"] .spk{transform:scale(.86)}
+/* al cambiar de nivel, el altavoz da un pequeño golpe */
+.vol-ic.bump .spk{animation:volBump .35s var(--spring)}
+@keyframes volBump{40%{transform:scale(1.15)}}
+.is-playing .vol-ic:not([data-l="0"]) .w{animation:volWave var(--beat,1.6s) ease-out infinite}
+.is-playing .vol-ic .w2{animation-delay:calc(var(--beat,1.6s) * .12)}
+.is-playing .vol-ic .w3{animation-delay:calc(var(--beat,1.6s) * .24)}
+@keyframes volWave{0%{stroke-opacity:1;transform:translateX(.8px)}60%{stroke-opacity:.55;transform:none}100%{stroke-opacity:1}}
+@media (prefers-reduced-motion:reduce){.is-playing .vol-ic .w{animation:none}}
 .p-vol input{flex:1}
 .p-tools{display:flex;gap:3px;margin-top:16px}
 .p-tools .icb{flex:1 1 0;height:52px;border-radius:8px;background:color-mix(in srgb,var(--surface-c-highest) 80%,transparent);color:var(--fg);
@@ -1064,7 +1084,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
       <button data-act="lyrics" aria-label="Letra"><svg class="ic"><use href="#i-lyrics"/></svg></button>
       <button data-act="queue" aria-label="Cola"><svg class="ic"><use href="#i-queue"/></svg></button>
     </div>
-    <div class="now-vol"><svg class="ic"><use href="#i-vol"/></svg><input type="range" id="n-vol" min="0" max="100" value="80" aria-label="Volumen"></div>
+    <div class="now-vol"><button class="vol-btn" type="button" aria-label="Silenciar"><svg class="ic vol-ic" viewBox="0 0 24 24" data-l="3" aria-hidden="true"><path class="spk" d="M3 9v6h4l5 5V4L7 9H3z"/><path class="w w1" d="M15 9.4a3.4 3.4 0 010 5.2"/><path class="w w2" d="M17.3 7.2a6.6 6.6 0 010 9.6"/><path class="w w3" d="M19.6 5a9.8 9.8 0 010 14"/><path class="x" d="M15.6 9.6l4.8 4.8m0-4.8l-4.8 4.8"/></svg></button><input type="range" id="n-vol" min="0" max="100" value="80" aria-label="Volumen"></div>
   </div>
   <div class="now-next"><h3>A continuación</h3><div id="n-up"></div></div>
 </aside>
@@ -1117,7 +1137,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
       <button class="mid" data-act="next" aria-label="Siguiente"><svg class="ic"><use href="#i-next"/></svg></button>
       <button class="icb" data-act="repeat" aria-label="Repetir"><svg class="ic"><use href="#i-repeat"/></svg></button>
     </div>
-    <div class="p-vol"><svg class="ic"><use href="#i-vol"/></svg><input type="range" id="p-vol" min="0" max="100" value="80" aria-label="Volumen"></div>
+    <div class="p-vol"><button class="vol-btn" type="button" aria-label="Silenciar"><svg class="ic vol-ic" viewBox="0 0 24 24" data-l="3" aria-hidden="true"><path class="spk" d="M3 9v6h4l5 5V4L7 9H3z"/><path class="w w1" d="M15 9.4a3.4 3.4 0 010 5.2"/><path class="w w2" d="M17.3 7.2a6.6 6.6 0 010 9.6"/><path class="w w3" d="M19.6 5a9.8 9.8 0 010 14"/><path class="x" d="M15.6 9.6l4.8 4.8m0-4.8l-4.8 4.8"/></svg></button><input type="range" id="p-vol" min="0" max="100" value="80" aria-label="Volumen"></div>
     <div class="p-tools">
       <button class="icb" data-act="lyrics" aria-label="Letra"><svg class="ic"><use href="#i-lyrics"/></svg></button>
       <button class="icb" data-act="queue" aria-label="Cola"><svg class="ic"><use href="#i-queue"/></svg></button>

@@ -684,6 +684,24 @@ const App = {
     Player.setVolume(this.state.volume);
     store.set('volume', this.state.volume);
     const r = $('#p-vol'); r.value = this.state.volume; r.style.setProperty('--v', this.state.volume + '%');
+    this.updateVolIcon();
+  },
+  // icono de volumen: 0 ondas (silencio, con X) a 3 ondas; al cambiar de nivel, un pequeño golpe
+  updateVolIcon() {
+    const v = this.state.volume, l = v === 0 ? 0 : v < 34 ? 1 : v < 67 ? 2 : 3;
+    $$('.vol-ic').forEach(ic => {
+      if (ic.dataset.l === String(l)) return;
+      ic.dataset.l = l;
+      ic.classList.remove('bump'); void ic.offsetWidth; ic.classList.add('bump');
+    });
+    $$('.vol-btn').forEach(b => b.setAttribute('aria-label', l ? 'Silenciar' : 'Activar sonido'));
+  },
+  // tocar el icono: silencio y vuelta al volumen de antes
+  toggleMute() {
+    if (this.state.volume > 0) { this._prevVol = this.state.volume; this.setVolume(0); }
+    else this.setVolume(this._prevVol || 60);
+    const n = document.getElementById('n-vol');
+    if (n) { n.value = this.state.volume; n.style.setProperty('--v', this.state.volume + '%'); }
   },
   // segundo por el que va la canción actual (aparte de la cola, que es más grande)
   savePos(cur) {
@@ -1207,6 +1225,8 @@ const App = {
     this.wave.setActive(false);
     this.setVolume(s.volume);
     $('#p-vol').addEventListener('input', e => this.setVolume(+e.target.value));
+    $$('.vol-btn').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); this.toggleMute(); }));
+    this.updateVolIcon();
 
     // controles (mini y reproductor completo)
     document.addEventListener('click', e => {
