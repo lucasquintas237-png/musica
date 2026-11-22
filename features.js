@@ -750,8 +750,31 @@ const Features = (() => {
   }
 
   /* ================================================================ PWA */
+  /* Actualizaciones: la app instalada se queda abierta días sin recargarse, así que busca versión
+     nueva al volver a ella y cada 20 min. Cuando la nueva toma el control, recarga sola si no
+     suena nada; si está sonando, espera a que pares la música (la cola se guarda y se recupera). */
   if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:') {
-    addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    const hadController = !!navigator.serviceWorker.controller;
+    let pendingReload = false, reloading = false;
+    const tryReload = () => {
+      if (!pendingReload || reloading || App.state.playing) return;
+      reloading = true;
+      try { App.saveQueue(); } catch (_) {}
+      location.reload();
+    };
+    addEventListener('load', () => navigator.serviceWorker.register('sw.js').then(reg => {
+      const check = () => reg.update().catch(() => {});
+      setInterval(check, 20 * 60e3);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); tryReload(); });
+    }).catch(() => {}));
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;                 // primera instalación: no hace falta recargar
+      pendingReload = true;
+      if (App.state.playing) toast('Hay una versión nueva: se aplicará cuando pares la música', 4000);
+      tryReload();
+    });
+    const up = App.updatePlaying;
+    App.updatePlaying = function (...a) { const r = up.apply(this, a); setTimeout(tryReload, 1500); return r; };
   }
 
   /* ================================================================ eventos */
