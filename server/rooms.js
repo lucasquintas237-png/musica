@@ -192,7 +192,12 @@ export async function handleRooms(request, env, path, ctx) {
   if (!mm) return err(404, 'api');
   const code = mm[1], act = mm[2] || '';
   // la sala y si estás bloqueado, en una sola consulta
-  const r = await db.prepare("SELECT host_id, v, state, (SELECT 1 FROM room_bans b WHERE b.host_id = rooms.host_id AND b.user_id = ? AND (b.code = rooms.code OR b.code = '')) AS banned FROM rooms WHERE code = ?").bind(me.id, code).first();
+  // la sala, si estás bloqueado, sus ajustes y si eres administrador: todo en una sola consulta
+  const r = await db.prepare(`SELECT host_id, v, state,
+      (SELECT 1 FROM room_bans b WHERE b.host_id = rooms.host_id AND b.user_id = ? AND (b.code = rooms.code OR b.code = '')) AS banned,
+      (SELECT conf FROM room_conf c WHERE c.code = rooms.code) AS conf,
+      (SELECT 1 FROM room_admins a WHERE a.code = rooms.code AND a.user_id = ?) AS adm
+    FROM rooms WHERE code = ?`).bind(me.id, me.id, code).first();
   if (!r) return err(404, 'Esa sala no existe o ya se cerró');
   const host = r.host_id === me.id;
   if (!host && act !== 'leave' && r.banned) {
@@ -244,10 +249,13 @@ export async function handleRooms(request, env, path, ctx) {
   }
   if (act === 'join' && m === 'POST') { notify(code, { t: 'refresh' }); return view('h', [touchStmt(db, code, me)]); }
   if (m !== 'POST') return err(405, 'Método no permitido');
-  const conf = await getConf(db, code);
+  let conf = { ...DEFAULT_CONF };
+  try { if (r.conf) conf = { ...conf, ...JSON.parse(r.conf) }; } catch (_) {}
+  // quién controla la música, sin más consultas
+  const ctl = host || conf.guestsControl || !!r.adm;
 
   if (act === 'state') {
-    if (!await canControl(db, code, me, r.host_id, conf)) return err(403, 'Solo el anfitrión y los administradores controlan la música');
+    if (!ctl) return err(403, 'Solo el anfitrión y los administradores controlan la música');
     const b = await body();
     // el latido periódico no pisa un cambio que aún no ha visto quien lo envía
     if (b.beat && +b.baseV !== r.v) return json(200, { ok: false, stale: true, v: r.v, now: Date.now() });
@@ -267,7 +275,7 @@ export async function handleRooms(request, env, path, ctx) {
   }
   // ---- cola compartida
   if (act === 'queue' || act === 'suggest') {
-    if (!conf.guestsAdd && !await canControl(db, code, me, r.host_id, conf)) return err(403, 'El anfitrión no deja añadir canciones');
+    if (!conf.guestsAdd && !ctl) return err(403, 'El anfitrión no deja añadir canciones');
     const e = await addToQueue(db, code, me, (await body()).track);
     if (!e) notify(code, { t: 'refresh' });
     return e || view();
@@ -276,13 +284,13 @@ export async function handleRooms(request, env, path, ctx) {
     const b = await body();
     const row = await db.prepare('SELECT user_id FROM room_queue WHERE id = ? AND code = ?').bind(+b.qid || 0, code).first();
     if (!row) return view();
-    if (row.user_id !== me.id && !await canControl(db, code, me, r.host_id, conf)) return err(403, 'Solo puedes quitar tus canciones');
+    if (row.user_id !== me.id && !ctl) return err(403, 'Solo puedes quitar tus canciones');
     await db.prepare('DELETE FROM room_queue WHERE id = ?').bind(+b.qid).run();
     notify(code, { t: 'refresh' });
     return view();
   }
   if (act === 'queue/pop') {
-    if (!await canControl(db, code, me, r.host_id, conf)) return err(403, 'Solo quien controla la música puede hacer esto');
+    if (!ctl) return err(403, 'Solo quien controla la música puede hacer esto');
     const row = await db.prepare('SELECT id, user_name, track FROM room_queue WHERE code = ? ORDER BY id LIMIT 1').bind(code).first();
     if (!row) return json(200, { track: null });
     await db.prepare('DELETE FROM room_queue WHERE id = ?').bind(row.id).run();
