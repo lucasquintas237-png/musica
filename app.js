@@ -996,6 +996,7 @@ const App = {
       title: t.title, sub: t.artist, img: t.cover, origin: opts.origin, items: [
         { icon: 'playnext', label: 'Reproducir a continuación', fn: () => this.playNext(t) },
         { icon: 'queue', label: 'Añadir a la cola', fn: () => this.addToQueue(t) },
+        window.Together && Together.room && { icon: 'people', label: 'Añadir a la cola de la sala', fn: () => Together.addToQueue(t) },
         { icon: 'radio', label: 'Iniciar radio', fn: () => Features.startRadio(t) },
         { icon: 'lib', label: 'Añadir a una lista', fn: () => this.pickPlaylist(t) },
         { icon: fav ? 'heart-f' : 'heart', label: fav ? 'Quitar de favoritas' : 'Añadir a favoritas', fn: () => { Library.toggleFav(t); this.updateFav(); } },

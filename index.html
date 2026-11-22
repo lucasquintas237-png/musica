@@ -521,6 +521,37 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
 .room-join{display:flex;gap:8px;width:100%}
 .room-join input{flex:1;min-width:0;height:52px;border-radius:14px;border:1px solid var(--outline);background:transparent;padding:0 16px;font-size:22px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;text-align:center;color:var(--fg);outline:0}
 .room-join input:focus{border:2px solid var(--primary)}
+/* sala estilo Jam: reacciones, cola compartida y chat */
+.room-sheet .rp-sec{align-self:stretch;text-align:left}
+.room-react{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;align-self:stretch}
+.room-react button{width:44px;height:44px;border-radius:50%;font-size:22px;line-height:1;background:var(--surface-c-high);transition:transform .25s var(--spring),background .2s}
+.room-react button:hover{background:var(--surface-c-highest)}
+.room-react button:active{transform:scale(1.25)}
+.room-queue{align-self:stretch;display:flex;flex-direction:column;gap:2px;text-align:left}
+.rq-row{display:flex;align-items:center;gap:12px;padding:6px 6px 6px 8px;border-radius:6px;background:var(--surface-c-high)}
+.rq-row:first-child{border-radius:18px 18px 6px 6px}.rq-row:last-child{border-radius:6px 6px 18px 18px}.rq-row:only-child{border-radius:18px}
+.rq-art{width:44px;height:44px;border-radius:10px;object-fit:cover;flex:none;background:var(--surface-c-highest)}
+.rq-txt{flex:1;min-width:0;display:flex;flex-direction:column}
+.rq-txt b{font-size:14.5px}.rq-txt small{font-size:12.5px;color:var(--fg2)}
+.rq-by{width:26px;height:26px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--primary-container);color:var(--on-primary-container)}
+.rq-row .icb{width:36px;height:36px}
+.rq-empty,.rc-empty{margin:4px 0 !important;font-size:13.5px;text-align:center}
+.room-group{align-self:center}
+.room-chat{align-self:stretch;display:flex;flex-direction:column;gap:8px}
+.room-chat-log{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px 2px;text-align:left}
+.rc-msg{max-width:85%;align-self:flex-start;padding:8px 12px;border-radius:18px 18px 18px 6px;background:var(--surface-c-high);font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.rc-msg b{display:block;font-size:12px;color:var(--primary);margin-bottom:1px}
+.rc-msg.me{align-self:flex-end;border-radius:18px 18px 6px 18px;background:var(--primary-container);color:var(--on-primary-container)}
+.rc-msg.me b{display:none}
+.room-chat-form{display:flex;gap:8px}
+.room-chat-form input{flex:1;min-width:0}
+.room-conf{align-self:stretch;display:flex;flex-direction:column;gap:2px;text-align:left}
+.room-conf .set{min-height:60px}
+/* emoji que sube por la pantalla */
+.room-float{position:fixed;z-index:60;bottom:90px;display:flex;flex-direction:column;align-items:center;pointer-events:none;animation:roomFloat 2.6s cubic-bezier(.2,.6,.3,1) forwards}
+.room-float .rf-e{font-size:42px;line-height:1;filter:drop-shadow(0 4px 10px rgba(0,0,0,.35))}
+.room-float .rf-by{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(0,0,0,.55);color:#fff;margin-top:2px}
+@keyframes roomFloat{0%{opacity:0;transform:translate(0,20px) scale(.6)}12%{opacity:1;transform:translate(0,0) scale(1.1)}100%{opacity:0;transform:translate(var(--dx,0),-55vh) scale(1)}}
 .room-people{align-self:stretch;display:flex;flex-direction:column;gap:2px;text-align:left}
 .rp-row{display:flex;align-items:center;gap:12px;padding:8px 6px 8px 12px;border-radius:6px;background:var(--surface-c-high)}
 .rp-row:first-child{border-radius:20px 20px 6px 6px}.rp-row:last-child{border-radius:6px 6px 20px 20px}.rp-row:only-child{border-radius:20px}

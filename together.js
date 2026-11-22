@@ -1,28 +1,37 @@
 'use strict';
-/* together.js — "Escuchar juntos": cada persona oye la música en su dispositivo, sincronizada.
-   - El anfitrión y los administradores que él nombre manejan la música: al cambiar algo lo
-     publican, y los demás (también el anfitrión) se ajustan al último cambio. El anfitrión además
-     publica un latido cada 8 s.
+/* together.js — "Escuchar juntos": cada persona oye la música en su dispositivo, sincronizada,
+   al estilo Jam.
+   - Controlan la música el anfitrión, los administradores que él nombre y, si él lo permite, todos:
+     al cambiar algo lo publican y los demás (también el anfitrión) se ajustan al último cambio.
+     El anfitrión además publica un latido cada 8 s.
+   - Cola compartida: todo el mundo ve qué viene después y quién lo añadió. Los invitados añaden
+     canciones directamente (si el anfitrión lo permite) y pueden quitar las suyas. Al acabar una
+     canción, el anfitrión pone la siguiente de la cola de la sala.
+   - Reacciones con emojis que ven todos, chat y "Añadir canciones para el grupo".
    - Los invitados consultan la sala cada 2 s y se ajustan: cambian de canción, pausan/reanudan y
-     corrigen la posición si se desvían más de 1 s (compensando la diferencia de reloj con el
-     servidor). Si un invitado pone una canción, se propone al anfitrión y este la añade a su cola.
+     corrigen la posición si se desvían más de 1 s (compensando la diferencia de reloj con el servidor).
    - El anfitrión puede bloquear a alguien en esa sala o en todas sus salas.
    - Necesita las cuentas (web publicada en Cloudflare). Se entra con el código o con un enlace
      "#sala=CÓDIGO". Al recargar la página se vuelve a entrar en la misma sala. */
 const Together = (() => {
-  let room = null;            // { code, isHost, isAdmin, host }
+  let room = null;            // { code, isHost, isAdmin, control, host }
   let offset = 0;             // hora del servidor - hora local (ms)
   let pollT = 0, beatT = 0, pushT = 0, bar = null, applying = false, lastTrackId = '';
   let lastV = 0;              // última versión del estado de la sala que conoce este dispositivo
   let quietUntil = 0;         // tras aplicar un cambio de otro, no se republica lo mismo
-  let lastRoom = null;        // última vista de la sala (personas, bloqueados)
+  let lastRoom = null;        // última vista de la sala (personas, cola, ajustes, bloqueados)
   let needSync = false;       // al entrar (o al recargar) hay que ponerse al día antes de publicar nada
   let intentAt = 0;           // última acción de verdad de esta persona (play, pausa, adelantar)
   let trackAt = 0;            // último cambio de canción propio (no el que llega de la sala)
   let hold = false;           // invitado que ha pausado solo para él
   let hintAt = 0;             // aviso de "toca ▶" (los navegadores no dejan sonar sin tocar antes)
-  const canCtl = () => !!(room && (room.isHost || room.isAdmin));
+  let lastEvent = 0;          // último evento (reacción, chat…) recibido
+  let chat = [];              // mensajes del chat
+  let popping = false;
+  const EMOJIS = ['🔥', '❤️', '😂', '🙌', '💃', '👏', '😍', '🤯'];
+  const canCtl = () => !!(room && (room.isHost || room.control));
   const me = () => String((window.Account && Account.user) || '').toLowerCase();
+  const isMe = name => String(name || '').toLowerCase() === me();
   const KEY = 'mz:room';
 
   async function api(method, path, body) {
@@ -51,14 +60,16 @@ const Together = (() => {
     const r = await api('POST', `room/${code}/join`);
     if (!r.ok) return toast((r.j && r.j.error) || 'No se pudo entrar en la sala');
     enter(r.j.room, true);
-    toast(r.j.room.isHost ? 'Has vuelto a tu sala' : r.j.room.isAdmin ? `Eres administrador en la sala de ${r.j.room.host}` : `Escuchando con ${r.j.room.host}`);
+    toast(r.j.room.isHost ? 'Has vuelto a tu sala' : r.j.room.control ? `Eres administrador en la sala de ${r.j.room.host}` : `Escuchando con ${r.j.room.host}`);
     // todos (también el anfitrión al recargar) se ponen con lo que suena ahora en la sala
     apply(r.j.room.state);
   }
   function enter(rm, joining) {
-    room = { code: rm.code, isHost: rm.isHost, isAdmin: !!rm.isAdmin, host: rm.host };
+    room = { code: rm.code, isHost: rm.isHost, isAdmin: !!rm.isAdmin, control: !!rm.control, host: rm.host };
     lastV = rm.v || 0;
     needSync = !!joining; hold = false; hintAt = 0; lastTrackId = '';
+    chat = []; lastEvent = rm.lastEvent || 0;
+    (rm.events || []).forEach(e => { if (e.kind === 'chat') chat.push(e); });
     try { localStorage.setItem(KEY, rm.code); } catch (_) {}
     document.body.classList.add('in-room');
     document.querySelectorAll('[data-together]').forEach(b => b.setAttribute('aria-label', 'Escuchar juntos: estás en una sala'));
@@ -71,7 +82,7 @@ const Together = (() => {
     if (!room) return;
     const code = room.code, host = room.isHost;
     clearInterval(pollT); clearInterval(beatT);
-    room = null;
+    room = null; lastRoom = null; chat = [];
     try { localStorage.removeItem(KEY); } catch (_) {}
     document.body.classList.remove('in-room');
     document.querySelectorAll('[data-together]').forEach(b => b.setAttribute('aria-label', 'Escuchar juntos'));
@@ -88,7 +99,7 @@ const Together = (() => {
     if (!silent) toast(host ? 'Sala cerrada' : 'Has salido de la sala');
   }
 
-  /* ---------------------------------------------------------------- anfitrión y administradores: publicar */
+  /* ---------------------------------------------------------------- quien controla: publicar */
   function push(now, beat) {
     if (!canCtl()) return;
     if (beat && needSync) return;                       // aún no está al día: no pisa lo que suena en la sala
@@ -106,17 +117,20 @@ const Together = (() => {
   async function poll() {
     if (!room) return;
     let r;
-    try { r = await api('GET', `room/${room.code}`); } catch (_) { return; }
+    try { r = await api('GET', `room/${room.code}?since=${lastEvent}`); } catch (_) { return; }
     if (!room) return;
     if (r.status === 404) { leave(true); return toast('La sala se ha cerrado'); }
     if (r.status === 403) { leave(true); return toast('El anfitrión te ha bloqueado en esta sala', 4000); }
     if (!r.ok || !r.j) return;
     const rm = r.j.room;
-    if (!rm.isHost && !!rm.isAdmin !== room.isAdmin) {
-      room.isAdmin = !!rm.isAdmin;
+    if (!rm.isHost && !!rm.control !== room.control) {
+      room.control = !!rm.control;
       hold = false;
-      toast(room.isAdmin ? `${rm.host} te ha hecho administrador: ya puedes manejar la música` : 'Ya no eres administrador de la sala', 4000);
+      toast(room.control ? 'Ya puedes manejar la música de la sala' : 'Ya no puedes manejar la música de la sala', 4000);
     }
+    room.isAdmin = !!rm.isAdmin;
+    handleEvents(rm.events || []);
+    if (rm.lastEvent > lastEvent) lastEvent = rm.lastEvent;
     renderBar(rm);
     // quien maneja la música se ajusta a los cambios de los demás (y, al entrar, hasta quedar al
     // día); los invitados, siempre
@@ -124,23 +138,101 @@ const Together = (() => {
     if (fresh) lastV = rm.v;
     const st = rm.state;
     if (canCtl()) {
-      const other = st && st.by && String(st.by).toLowerCase() !== me();
-      // tras aplicar un cambio de otro (p. ej. de un administrador), el latido del anfitrión se
-      // calla hasta que este dispositivo esté de verdad al día: si no, mientras carga la canción
-      // nueva publicaría la vieja o el segundo 0 y desharía el cambio
+      const other = st && st.by && !isMe(st.by);
+      // tras aplicar un cambio de otro, el latido del anfitrión se calla hasta que este dispositivo
+      // esté de verdad al día: si no, mientras carga la canción nueva publicaría la vieja o el
+      // segundo 0 y desharía el cambio
       if (fresh && other) { apply(st); needSync = true; }
       else if (needSync) apply(st);
       if (needSync && inSync(st)) needSync = false;
     } else apply(st);
     hintPlay(st);
-    if (rm.isHost) {
-      (rm.suggest || []).forEach(s => {
-        const st = App.state;
-        if (!App.current) App.playList([s.track], 0, 'Sala ' + rm.code);
-        else { st.queue.splice(st.index + 1, 0, { ...s.track }); App.emit('queue'); App.saveQueue(); }
-        toast(`${s.by} propone «${s.track.title}»`, 3500);
-      });
+    // sala sin nada sonando y con canciones en la cola: el anfitrión empieza
+    if (room.isHost && !App.current && rm.queue && rm.queue.length) popAndPlay(false);
+  }
+
+  /* ---------------------------------------------------------------- eventos: reacciones, chat, canciones añadidas */
+  function handleEvents(list) {
+    let newChat = false;
+    for (const e of list) {
+      if (e.id <= lastEvent) continue;
+      lastEvent = e.id;
+      if (e.kind === 'react') { if (!isMe(e.by)) floatEmoji(e.data.emoji, e.by); }
+      else if (e.kind === 'chat') {
+        chat.push(e); if (chat.length > 50) chat.shift(); newChat = true;
+        if (!isMe(e.by) && !sheetOpen()) toast(`${e.by}: ${e.data.text}`, 4000);
+      } else if (e.kind === 'add') { if (!isMe(e.by)) toast(`${e.by} añadió «${e.data.title}»`, 3000); }
     }
+    if (newChat) renderChat();
+  }
+  // emoji que sube flotando por la pantalla (como en los directos)
+  function floatEmoji(emoji, by) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return toast(`${by || ''} ${emoji}`.trim(), 1500);
+    const n = document.createElement('div');
+    n.className = 'room-float';
+    n.innerHTML = `<span class="rf-e">${esc(emoji)}</span>${by ? `<span class="rf-by">${esc(by)}</span>` : ''}`;
+    n.style.left = (12 + Math.random() * 70) + '%';
+    n.style.setProperty('--dx', (Math.random() * 80 - 40) + 'px');
+    document.body.appendChild(n);
+    setTimeout(() => n.remove(), 2600);
+  }
+  function react(emoji) {
+    if (!room) return;
+    floatEmoji(emoji, '');
+    api('POST', `room/${room.code}/react`, { emoji }).catch(() => {});
+  }
+  async function sendChat(text) {
+    if (!room || !(text = String(text || '').trim())) return;
+    const r = await api('POST', `room/${room.code}/chat`, { text }).catch(() => null);
+    if (!r || !r.ok) return toast((r && r.j && r.j.error) || 'No se pudo enviar', 2500);
+    poll();
+  }
+
+  /* ---------------------------------------------------------------- cola compartida */
+  async function addToQueue(t, quiet) {
+    if (!room) return false;
+    if (!t || !t.id) { if (typeof Sources !== 'undefined') { try { await Sources.resolve(t); } catch (_) {} } }
+    if (!t || !t.id) { toast('Esta canción no se puede añadir'); return false; }
+    const r = await api('POST', `room/${room.code}/queue`, { track: trackOf(t) }).catch(() => null);
+    if (!r || !r.ok) { toast((r && r.j && r.j.error) || 'No se pudo añadir', 3000); return false; }
+    if (r.j && r.j.room) renderBar(r.j.room);
+    if (!quiet) toast(`Añadida a la cola de la sala: «${t.title}»`);
+    return true;
+  }
+  async function removeFromQueue(qid) {
+    const r = await api('POST', `room/${room.code}/queue/remove`, { qid }).catch(() => null);
+    if (!r || !r.ok) return toast((r && r.j && r.j.error) || 'No se pudo quitar', 2500);
+    if (r.j && r.j.room) renderBar(r.j.room);
+  }
+  // pasa a la siguiente de la cola de la sala (quien controla); devuelve si había alguna
+  async function popAndPlay(auto) {
+    if (popping || !room) return false;
+    popping = true;
+    try {
+      const r = await api('POST', `room/${room.code}/queue/pop`).catch(() => null);
+      const t = r && r.ok && r.j && r.j.track;
+      if (!t) return false;
+      const s = App.state, item = { ...t, atv: true, roomId: t.id };
+      if (!App.current) { s.queue = [item]; s.index = 0; App.start(); }
+      else { s.queue.splice(s.index + 1, 0, item); s.index++; App.start(); }
+      App.saveQueue && App.saveQueue();
+      if (r.j.by && !isMe(r.j.by)) toast(`Suena lo que añadió ${r.j.by}: «${t.title}»`, 3000);
+      return true;
+    } finally { popping = false; }
+  }
+  // canciones para el grupo: parecidas a lo que suena (sin repetir lo que ya está en la cola)
+  async function addForGroup(btn) {
+    const base = App.current || (lastRoom && lastRoom.state && lastRoom.state.track);
+    if (!base) return toast('Pon algo primero para saber qué os gusta');
+    if (btn) { btn.disabled = true; btn.dataset.l = btn.textContent; btn.textContent = 'Buscando…'; }
+    try {
+      const have = new Set([(base.roomId || base.id), base.vid, ...((lastRoom && lastRoom.queue) || []).map(q => q.track.id)].filter(Boolean));
+      const list = (window.Reco ? await Reco.radioFor(base) : await YTM.radio(base.id)).filter(t => t.id && !have.has(t.id)).slice(0, 5);
+      let n = 0;
+      for (const t of list) if (await addToQueue(t, true)) n++;
+      toast(n ? `${n} canciones añadidas para el grupo` : 'No se encontraron canciones parecidas');
+    } catch (_) { toast('No se encontraron canciones parecidas'); }
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.l; }
   }
 
   /* ---------------------------------------------------------------- sincronizarse con la sala */
@@ -209,16 +301,17 @@ const Together = (() => {
     // play/pausa no se bloquea aquí: lo decide el reproductor (ver hooks), así un invitado puede
     // darle a ▶ para empezar a oír la sala o pausar solo para él
     ['next', 'prev', 'jump'].forEach(n => wrap(n));
-    // poner una canción siendo invitado = proponerla al anfitrión
+    // poner una canción siendo invitado = añadirla a la cola de la sala (como en un Jam)
     const pl = App.playList, pwr = App.playWithRadio;
-    const propose = t => { if (!t || !t.id) return toast('Esta canción no se puede proponer'); api('POST', `room/${room.code}/suggest`, { track: trackOf(t) }).then(r => toast(r.ok ? `Propuesta enviada a ${room.host}` : (r.j && r.j.error) || 'No se pudo proponer')); };
-    App.playList = function (list, i = 0, ...a) { if (room && !canCtl() && !applying) return propose(list && list[i]); return pl.call(this, list, i, ...a); };
-    App.playWithRadio = function (t, ...a) { if (room && !canCtl() && !applying) return propose(t); return pwr.call(this, t, ...a); };
+    App.playList = function (list, i = 0, ...a) { if (room && !canCtl() && !applying) return addToQueue(list && list[i]); return pl.call(this, list, i, ...a); };
+    App.playWithRadio = function (t, ...a) { if (room && !canCtl() && !applying) return addToQueue(t); return pwr.call(this, t, ...a); };
   }
 
   /* ---------------------------------------------------------------- interfaz */
+  const sheetOpen = () => !!document.querySelector('#sheet:not([hidden]) .room-sheet[data-code]');
   function renderBar(rm) {
     if (!room) return;
+    lastRoom = rm;
     if (!bar) {
       bar = el(`<div id="room-bar" role="status"><span class="rb-dot" aria-hidden="true"></span><button class="rb-info" type="button"></button>
         <button class="icb rb-x" type="button" aria-label="Salir de la sala">${icon('close')}</button></div>`);
@@ -228,11 +321,13 @@ const Together = (() => {
     }
     const n = (rm.members || []).length;
     bar.querySelector('.rb-info').innerHTML = `<b>Sala ${esc(rm.code)}</b><span>${rm.isHost ? 'Eres el anfitrión' : rm.isAdmin ? 'Administrador · con ' + esc(rm.host) : 'Con ' + esc(rm.host)} · ${n} ${n === 1 ? 'persona' : 'personas'}</span>`;
-    bar._members = rm.members || [];
-    lastRoom = rm;
-    // si la hoja de la sala está abierta, se actualiza la lista de personas
-    const ppl = document.querySelector('#sheet .room-people');
-    if (ppl && ppl.dataset.code === rm.code) renderPeople(ppl);
+    // si la hoja de la sala está abierta, se actualizan sus partes
+    const sh = document.querySelector('#sheet .room-sheet[data-code]');
+    if (sh && sh.dataset.code === rm.code) {
+      renderPeople(sh.querySelector('.room-people'));
+      renderQueue(sh.querySelector('.room-queue'));
+      renderConf(sh.querySelector('.room-conf'));
+    }
   }
 
   /* ---------------------------------------------------------------- personas: administradores y bloqueos */
@@ -245,7 +340,7 @@ const Together = (() => {
   }
   function personMenu(p) {
     App.sheet({
-      title: p.name, sub: p.admin ? 'Administrador: puede manejar la música' : 'Invitado: escucha y propone canciones',
+      title: p.name, sub: p.admin ? 'Administrador: puede manejar la música' : 'Invitado: escucha y añade canciones',
       items: [
         p.admin ? { icon: 'person', label: 'Quitar administrador', fn: () => hostAct('admin', p.name, { on: false }, `${p.name} ya no es administrador`) }
           : { icon: 'person', label: 'Hacer administrador', fn: () => hostAct('admin', p.name, { on: true }, `${p.name} ahora puede manejar la música`) },
@@ -262,7 +357,7 @@ const Together = (() => {
   }
   function renderPeople(box) {
     const rm = lastRoom;
-    if (!rm || !room) return;
+    if (!box || !rm || !room) return;
     box.innerHTML = '';
     const people = (rm.people || []).slice().sort((a, b) => (b.host - a.host) || (b.admin - a.admin) || a.name.localeCompare(b.name));
     people.forEach(p => {
@@ -287,6 +382,61 @@ const Together = (() => {
       });
     }
   }
+  // la cola de la sala, con quién añadió cada canción
+  function renderQueue(box) {
+    const rm = lastRoom;
+    if (!box || !rm || !room) return;
+    const q = rm.queue || [];
+    const sig = q.map(x => x.qid).join(',') + '|' + canCtl();
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    box.innerHTML = '';
+    if (!q.length) {
+      box.appendChild(el(`<p class="muted rq-empty">${rm.conf && !rm.conf.guestsAdd && !canCtl() ? 'El anfitrión no deja añadir canciones.' : 'Aún no hay nada en la cola. Busca una canción y púlsala para añadirla.'}</p>`));
+      return;
+    }
+    q.forEach((x, i) => {
+      const t = x.track;
+      const row = el(`<div class="rq-row"><img class="rq-art" src="${esc(small(t.cover) || PLACEHOLDER)}" alt="">
+        <span class="rq-txt"><b class="ellipsis">${esc(t.title)}</b><small class="ellipsis">${esc(t.artist)}</small></span>
+        <span class="rq-by" title="Añadida por ${esc(x.by)}">${esc(x.by.slice(0, 1).toUpperCase())}</span></div>`);
+      if (x.mine || canCtl()) {
+        const b = el(`<button class="icb" type="button" aria-label="Quitar de la cola">${icon('close')}</button>`);
+        b.onclick = () => removeFromQueue(x.qid);
+        row.appendChild(b);
+      }
+      box.appendChild(row);
+    });
+  }
+  function renderChat(root) {
+    const box = (root || document).querySelector(root ? '.room-chat-log' : '#sheet .room-chat-log');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!chat.length) { box.appendChild(el('<p class="muted rc-empty">Di algo a la sala 👋</p>')); return; }
+    chat.slice(-30).forEach(m => {
+      box.appendChild(el(`<div class="rc-msg${isMe(m.by) ? ' me' : ''}"><b>${esc(m.by)}</b><span>${esc(m.data.text)}</span></div>`));
+    });
+    box.scrollTop = box.scrollHeight;
+  }
+  // ajustes de la sala (los cambia el anfitrión; los demás los ven)
+  function renderConf(box) {
+    const rm = lastRoom;
+    if (!box || !rm || !room || !room.isHost) return;
+    const c = rm.conf || {};
+    const sig = JSON.stringify(c);
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    const sw = on => `<span class="switch${on ? ' on' : ''}" role="switch" aria-checked="${!!on}"></span>`;
+    box.innerHTML = `<p class="rp-sec">Ajustes de la sala</p>
+      <div class="set" data-c="guestsAdd"><div class="lbl">Todos pueden añadir canciones<small>Lo que elijan va a la cola de la sala</small></div>${sw(c.guestsAdd)}</div>
+      <div class="set" data-c="guestsControl"><div class="lbl">Todos pueden controlar la música<small>Pausar, saltar y cambiar de canción, como tú</small></div>${sw(c.guestsControl)}</div>`;
+    box.querySelectorAll('[data-c]').forEach(x => x.onclick = async () => {
+      const k = x.dataset.c;
+      const r = await api('POST', `room/${room.code}/conf`, { [k]: !c[k] }).catch(() => null);
+      if (r && r.ok && r.j && r.j.room) renderBar(r.j.room);
+      else toast('No se pudo cambiar', 2500);
+    });
+  }
   const link = () => `${location.origin}${location.pathname}#sala=${room.code}`;
   async function invite() {
     const url = link(), text = `Escucha música conmigo: sala ${room.code}`;
@@ -297,19 +447,35 @@ const Together = (() => {
     if (!room) return;
     App.sheet({
       title: 'Sala ' + room.code,
-      sub: room.isHost ? 'Eres el anfitrión' : room.isAdmin ? 'Eres administrador' : 'Con ' + room.host,
+      sub: room.isHost ? 'Eres el anfitrión' : room.control ? 'Puedes manejar la música' : 'Con ' + room.host,
       body: box => {
         const hint = room.isHost ? 'Lo que pongas lo oirán todos. Toca ⋯ junto a alguien para hacerle administrador (podrá cambiar de canción, pausar y adelantar) o para bloquearle.'
-          : room.isAdmin ? `Puedes cambiar de canción, pausar y adelantar en la sala de ${room.host}.`
-          : `Escuchas lo que pone ${room.host}. Si eliges una canción, se le propone.`;
-        const b = el(`<div class="room-sheet"><div class="room-code" aria-label="Código de la sala">${room.code.split('').map(c => `<span>${c}</span>`).join('')}</div>
-          <div class="room-people" data-code="${esc(room.code)}"></div>
-          <p class="muted" style="font-size:13.5px">${esc(hint)}</p>
-          <div class="acct-actions"><button class="btn tonal" data-r="leave" type="button">${room.isHost ? 'Cerrar sala' : 'Salir'}</button><button class="btn" data-r="invite" type="button">${icon('link')}Invitar</button></div></div>`);
+          : room.control ? `Puedes cambiar de canción, pausar y adelantar en la sala de ${room.host}.`
+          : 'Elige canciones para añadirlas a la cola de la sala. Suenan para todos cuando les toca.';
+        const b = el(`<div class="room-sheet" data-code="${esc(room.code)}">
+          <div class="room-code" aria-label="Código de la sala">${room.code.split('').map(c => `<span>${c}</span>`).join('')}</div>
+          <div class="acct-actions"><button class="btn tonal" data-r="leave" type="button">${room.isHost ? 'Cerrar sala' : 'Salir'}</button><button class="btn" data-r="invite" type="button">${icon('link')}Invitar</button></div>
+          <div class="room-react" role="group" aria-label="Reacciones">${EMOJIS.map(e => `<button type="button" data-e="${e}" aria-label="Reaccionar con ${e}">${e}</button>`).join('')}</div>
+          <p class="rp-sec">Cola de la sala</p>
+          <div class="room-queue"></div>
+          <button class="btn tonal room-group" type="button">${icon('radio')}Añadir canciones para el grupo</button>
+          <p class="rp-sec">Chat</p>
+          <div class="room-chat"><div class="room-chat-log" aria-live="polite"></div>
+            <form class="room-chat-form"><input type="text" maxlength="200" placeholder="Escribe un mensaje…" aria-label="Mensaje para la sala" autocomplete="off"><button class="btn" type="submit">Enviar</button></form></div>
+          <p class="rp-sec">En la sala</p>
+          <div class="room-people"></div>
+          <div class="room-conf"></div>
+          <p class="muted" style="font-size:13.5px">${esc(hint)}</p></div>`);
         b.querySelector('[data-r=invite]').onclick = invite;
         b.querySelector('[data-r=leave]').onclick = () => { App.closeSheet(); leave(); };
-        renderPeople(b.querySelector('.room-people'));
+        b.querySelectorAll('[data-e]').forEach(x => x.onclick = () => react(x.dataset.e));
+        b.querySelector('.room-group').onclick = e => addForGroup(e.currentTarget);
+        b.querySelector('.room-chat-form').onsubmit = e => { e.preventDefault(); const i = e.target.querySelector('input'); const v = i.value; i.value = ''; sendChat(v); };
         box.appendChild(b);
+        renderPeople(b.querySelector('.room-people'));
+        renderQueue(b.querySelector('.room-queue'));
+        renderConf(b.querySelector('.room-conf'));
+        renderChat(b);
       }
     });
   }
@@ -347,10 +513,23 @@ const Together = (() => {
         return orig(...a);
       };
     });
+    // siguiente: si hay canciones en la cola de la sala, va primero la de la sala
+    const nx = App.next;
+    App.next = function (auto, ...rest) {
+      const roomQueue = room && lastRoom && lastRoom.queue && lastRoom.queue.length;
+      if (roomQueue && canCtl() && !applying && (room.isHost || !auto) && App.state.repeat !== 'one') {
+        popAndPlay(auto).then(ok => { if (!ok) nx.call(App, auto, ...rest); });
+        return;
+      }
+      return nx.call(this, auto, ...rest);
+    };
     // al acabar una canción solo avanza el anfitrión: el fundido entre canciones (que pasa a la
-    // siguiente de la cola propia) se desactiva para los demás mientras están en una sala
+    // siguiente de la cola propia) se desactiva para los demás, y también si hay cola de la sala
     const cfc = App.crossfadeCheck;
-    App.crossfadeCheck = function (...a) { if (room && !room.isHost) return; return cfc.apply(this, a); };
+    App.crossfadeCheck = function (...a) {
+      if (room && (!room.isHost || (lastRoom && lastRoom.queue && lastRoom.queue.length))) return;
+      return cfc.apply(this, a);
+    };
     App.on('track', () => {
       if (!room || applying || Date.now() < quietUntil) return;
       trackAt = Date.now(); push(true);
@@ -382,6 +561,6 @@ const Together = (() => {
   }, { once: true });
   addEventListener('hashchange', () => { if (/^#sala=/.test(location.hash)) autoJoin(); });
 
-  return { open: openSheet, create, join, leave, get room() { return room; } };
+  return { open: openSheet, create, join, leave, addToQueue, react, get room() { return room; } };
 })();
 window.Together = Together;
