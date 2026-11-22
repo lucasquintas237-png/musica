@@ -1254,9 +1254,9 @@ const App = {
 
     // pestañas (barra Liquid Glass)
     const tab = store.get('tab', 'home');
-    Glass.init({ tab, refraction: store.get('settings', {}).refraction !== false, onChange: (name, changed) => this.showTab(name, !changed && !this.views.length) });
-    // cristal por encima del contenido: barra, píldora y marco de la pantalla
-    if (window.Refract) { const st = store.get('settings', {}); Refract.init({ refraction: st.refraction !== false, frame: st.glassFrame !== false }); }
+    // la barra ya no es de cristal: el WebGL (liquid.js) solo pinta el fondo animado
+    Glass.init({ tab, refraction: true, onChange: (name, changed) => this.showTab(name, !changed && !this.views.length) });
+    document.documentElement.classList.toggle('no-aura', store.get('settings', {}).aura === false);
     this.showTab(tab);
     this.updateModes();
 

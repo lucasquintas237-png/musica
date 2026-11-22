@@ -272,38 +272,42 @@ input[type=range]::-moz-range-thumb{width:4px;height:40px;border:0;border-radius
 .lg #bg{display:none}
 .lg [data-glass]{background:transparent!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 .lg [data-glass-paint] .ic,.lg [data-glass-paint] span{opacity:0}
-/* Barra de navegación y píldora: cristal POR ENCIMA del contenido. El contenido pasa por detrás
-   y se ve a través: en Chromium con refracción real (refract.js, filtro SVG en backdrop-filter),
-   en el resto desenfocado. Brillo en el filo con sombras interiores. */
-.tb-bar{-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);
-  box-shadow:inset 1.5px 1.5px 0 -.5px var(--glass-rim),inset -1px -1px 0 -.5px rgba(255,255,255,.12),inset 0 0 0 1px var(--glass-edge),inset 0 0 22px rgba(255,255,255,.05),0 10px 30px rgba(0,0,0,.25)}
-.cg-refract .tb-bar{background:color-mix(in srgb,var(--glass-fill) 45%,transparent)}
-.tb-pill{-webkit-backdrop-filter:blur(8px) saturate(1.4) brightness(1.15);backdrop-filter:blur(8px) saturate(1.4) brightness(1.15);
-  box-shadow:inset 1px 1px 0 -.5px rgba(255,255,255,.5),inset -1px -1px 0 -.5px rgba(255,255,255,.14),0 3px 12px rgba(0,0,0,.18)}
-.tb-pill.lifted{background:rgba(255,255,255,.05);box-shadow:inset 1.5px 1.5px 0 -.5px rgba(255,255,255,.7),inset -1px -1px 0 -.5px rgba(255,255,255,.2),0 8px 24px rgba(0,0,0,.28)}
-/* marco de cristal alrededor de toda la pantalla (cuatro franjas que refractan lo de detrás) */
-:root{--frame-w:10px}
-#lg-frame{position:fixed;inset:0;z-index:90;pointer-events:none;display:none}
-.cg-frame #lg-frame{display:block}
-#lg-frame .e{position:absolute;display:block}
-#lg-frame .t{left:0;right:0;top:0;height:var(--frame-w)}
-#lg-frame .b{left:0;right:0;bottom:0;height:var(--frame-w)}
-#lg-frame .l{top:0;bottom:0;left:0;width:var(--frame-w)}
-#lg-frame .r{top:0;bottom:0;right:0;width:var(--frame-w)}
-#lg-frame::after{content:"";position:absolute;inset:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 1px 0 0 rgba(255,255,255,.1),inset -1px 0 0 rgba(255,255,255,.1),inset 0 -1px 0 rgba(255,255,255,.08),inset 0 0 calc(var(--frame-w) * 2) rgba(255,255,255,.07)}
-[data-theme="light"] #lg-frame::after{box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 0 0 1px rgba(0,0,0,.06),inset 0 0 calc(var(--frame-w) * 2) rgba(255,255,255,.35)}
-html:not(.lg) [data-glass]{-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);
-  box-shadow:inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-edge), 0 8px 30px rgba(0,0,0,.18)}
+/* ------------------------------------------------------------------ barra "Aura"
+   Barra sólida (sin cristal) con un borde de luz que gira con los colores de la portada que suena
+   y late al ritmo de la canción (--beat, del BPM); debajo, un halo del mismo color. La pestaña
+   activa se rellena con el color principal (la píldora conserva su física de gelatina). */
+@property --aura-angle{syntax:'<angle>';inherits:true;initial-value:0deg}
+:root{--beat:1.6s;--aura-a:var(--primary);--aura-b:var(--on-tertiary-container)}
 #tabwrap{position:fixed;z-index:6;left:50%;bottom:calc(var(--tab-gap) + var(--safe-b));transform:translateX(-50%);
   width:min(var(--tab-w), calc(100vw - 2 * var(--gutter)));height:var(--tab-h);touch-action:none;user-select:none;-webkit-user-select:none;
-  transition:left .45s var(--ease-emph)}
-.tb-bar{position:absolute;inset:0;border-radius:calc(var(--tab-h) / 2);background:var(--glass-fill)}
+  transition:left .45s var(--ease-emph);--aura-angle:0deg;animation:auraSpin 7s linear infinite;animation-play-state:paused}
+.is-playing #tabwrap{animation-play-state:running}
+@keyframes auraSpin{to{--aura-angle:360deg}}
+.tb-bar{position:absolute;inset:0;border-radius:calc(var(--tab-h) / 2);background:color-mix(in srgb,var(--surface-c-high) 94%,transparent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 28px rgba(0,0,0,.32)}
+/* el borde de luz: un degradado cónico que gira, recortado a un aro de 1,5 px */
+.tb-bar::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.5px;pointer-events:none;
+  background:conic-gradient(from var(--aura-angle),var(--aura-a),transparent 22%,var(--aura-b) 45%,transparent 70%,var(--aura-a));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+  opacity:.55;transition:opacity .6s}
+.is-playing .tb-bar::before{opacity:1}
+/* el halo que late al ritmo */
+#tabwrap::before{content:"";position:absolute;inset:-4px;z-index:-1;border-radius:calc(var(--tab-h) / 2 + 4px);pointer-events:none;
+  background:conic-gradient(from var(--aura-angle),var(--aura-a),transparent 25%,var(--aura-b) 50%,transparent 75%,var(--aura-a));
+  filter:blur(16px);opacity:.18;transition:opacity .6s}
+.is-playing #tabwrap::before{animation:auraBeat var(--beat) cubic-bezier(.2,.7,.3,1) infinite}
+@keyframes auraBeat{0%{opacity:.55;transform:scale(1.04)}100%{opacity:.2;transform:scale(1)}}
+.no-aura #tabwrap::before,.no-aura .tb-bar::before{display:none}
+@media (prefers-reduced-motion:reduce){#tabwrap,.is-playing #tabwrap::before{animation:none}}
 .tb-row{position:absolute;left:0;top:0;height:var(--tab-h);display:flex;padding:0 4px}
-.tb-item{width:var(--item-w);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--tab-ic)}
+.tb-item{width:var(--item-w);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--tab-ic);transition:color .25s}
 .tb-item .ic{width:25px;height:25px}
 .tb-item span{font-size:10px;font-weight:600;letter-spacing:.01em;line-height:12px}
-.tb-item[aria-selected="true"]{color:#3d9bff}
-.tb-pill{position:absolute;left:4px;top:4px;height:54px;width:var(--item-w);border-radius:27px;background:var(--pill-fill);pointer-events:none}
+.tb-item[aria-selected="true"]{color:var(--on-primary)}
+.tb-pill{position:absolute;left:4px;top:4px;height:54px;width:var(--item-w);border-radius:27px;background:var(--primary);pointer-events:none;
+  box-shadow:0 0 18px color-mix(in srgb,var(--primary) 45%,transparent),inset 0 1px 0 rgba(255,255,255,.25)}
+.tb-pill.lifted{box-shadow:0 6px 22px color-mix(in srgb,var(--primary) 60%,transparent),inset 0 1px 0 rgba(255,255,255,.35)}
 
 /* ------------------------------------------------------------------ reproductor completo */
 #player{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;overflow:hidden;
@@ -1131,7 +1135,6 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="m3.js"></script>
 <script src="liquid.js"></script>
 <script src="glass.js"></script>
-<script src="refract.js"></script>
 <script src="app.js"></script>
 <script src="account.js"></script>
 <script src="features.js"></script>

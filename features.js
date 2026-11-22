@@ -719,8 +719,7 @@ const Features = (() => {
         <div class="set" style="cursor:default">${icon('keyboard')}<div class="lbl">Tamaño de letra</div>
           <div class="seg" id="seg-fs">${[[0, 'Normal'], [1, 'Grande'], [2, 'Muy grande']].map(([v, l]) => `<button data-v="${v}" class="${(+s.fontSize || 0) === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="set" data-k="animBg">${icon('radio')}<div class="lbl">Fondo animado al ritmo<small>El color de fondo se mueve y late con el BPM mientras suena música</small></div>${sw(s.animBg !== false)}</div>
-        <div class="set" data-k="refraction">${icon('search')}<div class="lbl">Cristal líquido<small>${window.Refract && Refract.supported ? 'La barra refracta lo que pasa por detrás, con aberración y brillos' : 'Tu navegador no permite la refracción; aquí se usa desenfoque'}</small></div>${sw(s.refraction !== false)}</div>
-        <div class="set" data-k="glassFrame">${icon('full')}<div class="lbl">Borde de cristal en la pantalla<small>Un marco fino de cristal líquido alrededor de toda la pantalla</small></div>${sw(s.glassFrame !== false)}</div>
+        <div class="set" data-k="aura">${icon('bolt')}<div class="lbl">Aura en la barra<small>Un borde de luz con los colores de la portada que gira y late al ritmo de la canción</small></div>${sw(s.aura !== false)}</div>
       </div>
       <h2 class="sec">Reproducción</h2>
       <div class="group">
@@ -769,8 +768,7 @@ const Features = (() => {
       const k = x.dataset.k, cur = settings()[k] !== false, v = !cur;
       setSetting(k, v);
       if (k === 'dynamic') M3.setEnabled(v);
-      if (k === 'refraction') { Glass.setRefraction(v); window.Refract && Refract.setEnabled(v); }
-      if (k === 'glassFrame') window.Refract && Refract.setFrame(v);
+      if (k === 'aura') document.documentElement.classList.toggle('no-aura', !v);
       if (k === 'autoRadio') App.state.autoRadio = v;
       if (k === 'keepAwake') syncAwake();
       refreshSettings();

@@ -251,19 +251,21 @@ const FX = (() => {
   }
 
   /* ---------------------------------------------------------------- fondo animado al ritmo */
+  // el aura de la barra late al ritmo: un latido por pulso (60/BPM s); sin BPM, uno tranquilo
+  const setBeat = bpm => document.documentElement.style.setProperty('--beat', (bpm > 40 && bpm < 220 ? 60 / bpm : 1.6).toFixed(3) + 's');
   function animatedBackground() {
-    if (!window.Liquid) return;
+    const L = window.Liquid || { setMotion() {} };
     const on = () => store.get('settings', {}).animBg !== false;
-    const sync = () => Liquid.setMotion({ on: on(), playing: !!App.state.playing });
-    App.on('time', ({ cur }) => Liquid.setMotion({ songT: cur, playing: !!App.state.playing, on: on() }));
+    const sync = () => L.setMotion({ on: on(), playing: !!App.state.playing });
+    App.on('time', ({ cur }) => L.setMotion({ songT: cur, playing: !!App.state.playing, on: on() }));
     App.on('track', async t => {
-      Liquid.setMotion({ bpm: 0 });
-      if (window.BPM && t) { const r = await BPM.get(t); if (App.current === t && r && r.bpm) Liquid.setMotion({ bpm: r.bpm }); }
+      L.setMotion({ bpm: 0 }); setBeat(0);
+      if (window.BPM && t) { const r = await BPM.get(t); if (App.current === t && r && r.bpm) { L.setMotion({ bpm: r.bpm }); setBeat(r.bpm); } }
     });
     const up = App.updatePlaying;
     App.updatePlaying = function (...a) { const r = up.apply(this, a); sync(); return r; };
     sync();
-    if (App.current && window.BPM) BPM.get(App.current).then(r => r && r.bpm && Liquid.setMotion({ bpm: r.bpm }));
+    if (App.current && window.BPM) BPM.get(App.current).then(r => { if (r && r.bpm) { L.setMotion({ bpm: r.bpm }); setBeat(r.bpm); } });
   }
 
   /* ---------------------------------------------------------------- arranque */
