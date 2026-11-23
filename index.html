@@ -832,6 +832,7 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
 .pf-now-time,.pf-now-txt small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:380px){ .pf-now img{width:52px!important;height:52px!important} .pf-now-play{width:38px!important;height:38px!important} .pf-card{width:calc(100% - 24px)} }
 .pf-now:disabled{cursor:default}
+.pf-now[hidden]{display:none}
 .pf-now:not(:disabled):active{transform:scale(.98)}
 .pf-now img{width:64px;height:64px;border-radius:12px;object-fit:cover;flex:none}
 .pf-now-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}

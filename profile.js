@@ -174,7 +174,8 @@ const Profile = (() => {
     box.appendChild(h);
 
     // lo que está escuchando
-    if (p.now && p.now.track) box.appendChild(nowCard(p.now, p.username, mine));
+    // (siempre está, aunque ahora no suene nada: aparece sola si empieza a sonar algo)
+    box.appendChild(nowCard(p.now, p.username, mine));
     // compatibilidad musical
     if (p.compat) {
       const c = p.compat;
@@ -215,23 +216,76 @@ const Profile = (() => {
     });
   }
   const fmtT = s => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
-  // tarjeta "Escuchando ahora": al tocarla suena lo mismo, por el mismo punto
+  /* Tarjeta "Escuchando ahora", en vivo: el tiempo avanza cada segundo y cada pocos segundos se
+     pregunta al servidor (por si cambia de canción, pausa o salta). En tu propio perfil se usa
+     directamente lo que suena en esta app. Al tocarla suena lo mismo, por el mismo punto. */
   function nowCard(n, who, mine) {
-    const t = n.track, pct = n.duration ? Math.min(100, n.position / n.duration * 100) : 0;
-    const c = el(`<button type="button" class="pf-card pf-now${n.playing ? ' on' : ''}">
-      <img src="${esc(small(t.cover) || PLACEHOLDER)}" alt="">
-      <span class="pf-now-txt"><small>${n.playing ? (mine ? 'Estás escuchando' : 'Escuchando ahora') : 'En pausa'}</small>
-        <b class="ellipsis"></b><span class="ellipsis muted"></span>
-        <span class="pf-now-bar"><i style="width:${pct}%"></i></span><span class="pf-now-time muted">${fmtT(n.position)} / ${fmtT(n.duration)}</span></span>
+    const c = el(`<button type="button" class="pf-card pf-now">
+      <img alt="">
+      <span class="pf-now-txt"><small></small><b class="ellipsis"></b><span class="ellipsis muted pf-now-artist"></span>
+        <span class="pf-now-bar"><i></i></span><span class="pf-now-time muted"></span></span>
       ${mine ? '' : `<span class="pf-now-play" aria-hidden="true">${icon('play')}</span>`}</button>`);
-    c.querySelector('b').textContent = t.title;
-    c.querySelector('.pf-now-txt > .ellipsis.muted').textContent = t.artist;
-    if (!mine) {
+    c._live = { who, mine, n, t0: Date.now(), polled: Date.now(), id: '' };
+    if (mine) c.disabled = true;
+    else {
       c.setAttribute('aria-label', 'Escuchar lo mismo que ' + who);
-      c.onclick = () => listenWith(t, n, who);
-    } else c.disabled = true;
+      c.onclick = () => { const L = c._live; if (L.n && L.n.track) listenWith(L.n.track, { ...L.n, position: livePos(L) }, who); };
+    }
+    paintNow(c);
     return c;
   }
+  // lo que suena en esta app (para tu propio perfil)
+  function localNow() {
+    const t = App.current;
+    if (!t) return null;
+    const dur = (window.Player && Player.ready && Player.duration()) || t.dur || 0;
+    return { playing: !!App.state.playing, track: t, position: window.Player && Player.ready ? Player.time() : 0, duration: dur };
+  }
+  const livePos = L => {
+    const n = L.n;
+    if (!n) return 0;
+    const p = n.position + (n.playing ? (Date.now() - L.t0) / 1000 : 0);
+    return n.duration ? Math.min(n.duration, p) : p;
+  };
+  function paintNow(c) {
+    const L = c._live;
+    if (L.mine) { L.n = localNow(); L.t0 = Date.now(); }
+    const n = L.n;
+    c.hidden = !(n && n.track);
+    if (c.hidden) return;
+    const t = n.track, pos = livePos(L), dur = n.duration || t.dur || 0;
+    if (L.id !== t.id) {
+      L.id = t.id;
+      c.querySelector('img').src = small(t.cover) || PLACEHOLDER;
+      c.querySelector('b').textContent = t.title;
+      c.querySelector('.pf-now-artist').textContent = t.artist;
+    }
+    c.classList.toggle('on', !!n.playing);
+    c.querySelector('small').textContent = n.playing ? (L.mine ? 'Estás escuchando' : 'Escuchando ahora') : 'En pausa';
+    c.querySelector('.pf-now-bar i').style.width = (dur ? Math.min(100, pos / dur * 100) : 0) + '%';
+    c.querySelector('.pf-now-time').textContent = dur ? `${fmtT(pos)} / ${fmtT(dur)}` : fmtT(pos);
+  }
+  async function pollNow(c) {
+    const L = c._live;
+    L.polled = Date.now();
+    try {
+      const r = await fetch('/api/profile/' + encodeURIComponent(L.who) + '?now=1', { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const j = await r.json();
+      L.n = j.now || null; L.t0 = Date.now();
+      paintNow(c);
+    } catch (_) {}
+  }
+  setInterval(() => {
+    if (document.hidden) return;
+    document.querySelectorAll('.pf-now').forEach(c => {
+      if (!c._live || !c.isConnected || c.closest('.view[hidden]')) return;
+      if (!c._live.mine && Date.now() - c._live.polled > 6000) pollNow(c);
+      paintNow(c);
+    });
+  }, 1000);
+  // posición actualizada de un dato de "qué suena" recibido hace un rato
+  const aged = (n, since) => ({ ...n, position: Math.min(n.duration || Infinity, n.position + (n.playing ? (Date.now() - since) / 1000 : 0)) });
   function listenWith(t, n, who) {
     const at = n.playing ? n.position + 1 : n.position;
     App.playList([t], 0, 'Con ' + who);
@@ -345,12 +399,17 @@ const Profile = (() => {
           d.people.forEach(x => {
             let extra = null;
             if (x.room) { extra = el(`<button class="btn tonal pf-mini" type="button">${icon('people')}<span>Su sala</span></button>`); extra.onclick = () => window.Together && Together.join(x.room); }
-            else if (x.now && x.now.track) { extra = el(`<button class="icb" type="button" aria-label="Escuchar lo mismo">${icon('play')}</button>`); extra.onclick = () => listenWith(x.now.track, x.now, x.username); }
+            else if (x.now && x.now.track) { extra = el(`<button class="icb" type="button" aria-label="Escuchar lo mismo">${icon('play')}</button>`); extra.onclick = () => listenWith(x.now.track, aged(x.now, d.t), x.username); }
             list.appendChild(personRow(x, extra));
           });
         }
       };
       draw(true);
+      // mientras está abierta, se actualiza sola
+      const iv = setInterval(() => {
+        if (!list.isConnected) return clearInterval(iv);
+        if (!document.hidden && !list.closest('.view[hidden]')) draw(true);
+      }, 12e3);
     });
   }
 
@@ -370,7 +429,7 @@ const Profile = (() => {
       const c = el(`<div class="pf-friend">${av(x.username, 'pf-friend-av')}<button type="button" class="pf-friend-song"><img src="${esc(small(x.now.track.cover) || PLACEHOLDER)}" alt=""><b class="ellipsis"></b><small class="ellipsis muted"></small></button></div>`);
       c.querySelector('b').textContent = x.now.track.title;
       c.querySelector('small').textContent = x.username;
-      c.querySelector('.pf-friend-song').onclick = () => listenWith(x.now.track, x.now, x.username);
+      c.querySelector('.pf-friend-song').onclick = () => listenWith(x.now.track, aged(x.now, d.t), x.username);
       s.appendChild(c);
     });
     box.appendChild(s);
@@ -384,11 +443,11 @@ const Profile = (() => {
       setTimeout(() => homeStrip(document.querySelector('#tab-home .wrap')), 0);
       return r;
     };
-    // se refresca cada minuto mientras Inicio está a la vista
+    // se refresca cada 20 s mientras Inicio está a la vista
     setInterval(() => {
       const tab = document.querySelector('#tab-home');
       if (!document.hidden && tab && !tab.hidden && !document.body.classList.contains('in-view')) { friendsCache = null; homeStrip(tab.querySelector('.wrap')); }
-    }, 60e3);
+    }, 20e3);
   }, { once: true });
 
   // tu canción del perfil (desde el menú de una canción)

@@ -456,6 +456,8 @@ const Player = {
     try { this.ps[f.from].setVolume(this.vol); } catch (_) {}
   }
 };
+// otros archivos (remote.js, profile.js) lo buscan como window.Player
+window.Player = Player;
 
 /* ======================================================================= biblioteca */
 const Library = {
@@ -801,7 +803,9 @@ const App = {
     const t = this.current;
     if (!t || !Player.ready) return;
     const cur = Player.time(), dur = Player.duration() || t.dur || 0;
-    if (dur && !t.dur) t.dur = Math.round(dur);
+    // la duración solo se apunta cuando el reproductor ya tiene esta canción (al cambiar, durante
+    // un momento aún da la de la anterior)
+    if (dur && !t.dur && Player.duration() > 0) { let vid = ''; try { vid = Player.yt.getVideoData().video_id; } catch (_) {} if (vid === t.id) t.dur = Math.round(Player.duration()); }
     if (this.wave && !this.wave.dragging) { this.wave.set(dur ? cur / dur : 0); $('#p-cur').textContent = fmt(cur); }
     $('#p-dur').textContent = fmt(dur);
     $('#mini .bar i').style.width = (dur ? cur / dur * 100 : 0) + '%';

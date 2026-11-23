@@ -24,20 +24,38 @@ const Remote = (() => {
   const clean = t => t && { id: t.id, title: t.title, artist: t.artist, artistId: t.artistId || '', album: t.album || '', albumId: t.albumId || '', dur: t.dur || (window.Player && Player.ready ? Math.round(Player.duration() || 0) : 0), cover: t.cover || '' };
 
   /* ---------------------------------------------------------------- qué suena */
-  let pushT = 0, lastBeat = 0;
+  let pushT = 0, lastBeat = 0, retries = 0, durSent = '';
+  // la canción que tiene cargada de verdad el reproductor (al cambiar de canción, durante un
+  // momento sigue la anterior: su tiempo y su duración no valen para la nueva)
+  const loadedId = () => { try { return window.Player && Player.ready && Player.yt.getVideoData ? Player.yt.getVideoData().video_id || '' : ''; } catch (_) { return ''; } };
   function state(closed) {
-    const s = App.state;
-    return { device, deviceName, track: clean(App.current), playing: !!s.playing && !closed, pos: window.Player && Player.ready ? Player.time() : 0, volume: s.volume, shuffle: !!s.shuffle, repeat: s.repeat, closed: !!closed };
+    const s = App.state, t = App.current;
+    const ok = !!(t && loadedId() === t.id);
+    const tr = t ? clean(t) : null;
+    if (tr) tr.dur = (ok && Math.round(Player.duration() || 0)) || t.dur || 0;
+    return { device, deviceName, track: tr, playing: !!s.playing && !closed && ok, pos: ok ? Player.time() : 0, volume: s.volume, shuffle: !!s.shuffle, repeat: s.repeat, closed: !!closed, ok };
   }
   function push(now) {
     if (!on()) return;
     clearTimeout(pushT);
-    pushT = setTimeout(() => { lastBeat = Date.now(); api('POST', 'presence', state()).catch(() => {}); }, now ? 0 : 600);
+    pushT = setTimeout(() => {
+      const st = state();
+      // aún cargando la canción nueva: se cuenta ya (título) y otra vez en cuanto esté (tiempo)
+      if (App.current && !st.ok && retries < 15) { retries++; pushT = setTimeout(() => push(true), 1000); }
+      else retries = 0;
+      if (st.ok && st.track && st.track.dur) durSent = st.track.id;
+      lastBeat = Date.now();
+      delete st.ok;
+      api('POST', 'presence', st).catch(() => {});
+    }, now ? 0 : 400);
   }
-  // latido: mientras suena o la app está a la vista, cada minuto (para saber que sigue abierta)
+  // latido: mientras suena, cada 20 s (corrige cualquier desfase); con la app a la vista y en
+  // pausa, cada minuto (para saber que sigue abierta)
   setInterval(() => {
-    if (on() && (App.state.playing || document.visibilityState === 'visible') && Date.now() - lastBeat > 55e3) push(true);
-  }, 15e3);
+    if (!on()) return;
+    const gap = Date.now() - lastBeat;
+    if ((App.state.playing && gap > 20e3) || (document.visibilityState === 'visible' && gap > 55e3)) push(true);
+  }, 5e3);
   addEventListener('pagehide', () => { if (on()) api('POST', 'presence', state(true), true).catch(() => {}); });
 
   /* ---------------------------------------------------------------- órdenes a distancia */
@@ -86,6 +104,8 @@ const Remote = (() => {
     App.on('time', ({ cur }) => {
       const now = Date.now();
       if (App.state.playing && lastAt && Math.abs(cur - (lastPos + (now - lastAt) / 1000)) > 3) push();
+      // la duración de la canción ya se sabe: se cuenta (si antes no se sabía)
+      else if (App.current && durSent !== App.current.id && App.state.playing && Player.duration() > 0 && loadedId() === App.current.id) { durSent = App.current.id; push(); }
       lastPos = cur; lastAt = now;
     });
     const wait = () => on() ? (push(true), poll()) : setTimeout(wait, 1500);

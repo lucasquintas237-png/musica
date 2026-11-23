@@ -249,8 +249,23 @@ export async function handleProfiles(request, env, path) {
   let bio = '';
   if (u.bio) { try { bio = await open(env, u.id + ':bio', u.bio); } catch (_) { bio = ''; } }
   const base = { username: u.username, bio, avatar: u.avatar_v || null, since: u.created, me: u.id === me.id };
-  if (!new URL(request.url).searchParams.get('full')) return json(200, base);
+  const sp = new URL(request.url).searchParams;
+  if (sp.get('now')) return json(200, { now: await nowOnly(env, db, me, u) });
+  if (!sp.get('full')) return json(200, base);
   return json(200, { ...base, ...(await fullProfile(env, db, me, u)) });
+}
+
+// solo lo que suena (para refrescar la tarjeta cada pocos segundos), con la misma privacidad
+async function nowOnly(env, db, me, u) {
+  await ensureApiSchema(db);
+  const [rel, pref, pres] = await db.batch([
+    db.prepare('SELECT (SELECT 1 FROM follows WHERE user_id = ?1 AND target_id = ?2) AS a, (SELECT 1 FROM follows WHERE user_id = ?2 AND target_id = ?1) AS b').bind(me.id, u.id),
+    db.prepare('SELECT user_id, data FROM profile_prefs WHERE user_id = ?').bind(u.id),
+    db.prepare('SELECT user_id, state, updated FROM presence WHERE user_id = ?').bind(u.id)
+  ]);
+  const r = (rel.results || [])[0] || {}, prefs = await prefsOf(env, (pref.results || [])[0]);
+  const sees = u.id === me.id || prefs.share === 'all' || (prefs.share === 'friends' && r.a && r.b);
+  return sees ? (await presenceOf(env, pres.results)).get(u.id) || null : null;
 }
 
 /* ---------------------------------------------------------------- perfil completo */

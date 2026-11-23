@@ -1,5 +1,5 @@
 /* sw.js — caché de la app para abrirla sin conexión (la música necesita internet) */
-const CACHE = 'musica-v50';
+const CACHE = 'musica-v51';
 const SHELL = ['./', 'index.html', 'lang.js', 'app.js', 'account.js', 'profile.js', 'discord.js', 'bpm.js', 'reco.js', 'wrapped.js', 'car.js', 'share.js', 'welcome.js', 'together.js', 'remote.js','liquid.js', 'glass.js', 'now.js', 'fx.js', 'm3.js', 'features.js', 'sources.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
