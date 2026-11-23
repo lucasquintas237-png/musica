@@ -1,6 +1,6 @@
 /* sw.js — caché de la app para abrirla sin conexión (la música necesita internet) */
-const CACHE = 'musica-v48';
-const SHELL = ['./', 'index.html', 'lang.js', 'app.js', 'account.js', 'bpm.js', 'reco.js', 'wrapped.js', 'car.js', 'share.js', 'welcome.js', 'together.js', 'remote.js','liquid.js', 'glass.js', 'now.js', 'fx.js', 'm3.js', 'features.js', 'sources.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'musica-v49';
+const SHELL = ['./', 'index.html', 'lang.js', 'app.js', 'account.js', 'profile.js', 'bpm.js', 'reco.js', 'wrapped.js', 'car.js', 'share.js', 'welcome.js', 'together.js', 'remote.js','liquid.js', 'glass.js', 'now.js', 'fx.js', 'm3.js', 'features.js', 'sources.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

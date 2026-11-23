@@ -90,7 +90,7 @@ function imgAlternatives(u) {
 }
 function retryImg(im) {
   const src = im.getAttribute('src') || '';
-  if (!src || src.startsWith('data:')) return;
+  if (!src || src.startsWith('data:') || im.classList.contains('pf-img')) return;   // fotos de perfil: las trata profile.js
   // la misma <img> puede recibir otra portada (mini reproductor): entonces se empieza de cero
   if (!im.dataset.orig || src !== im.dataset.last) { im.dataset.orig = src; im.dataset.tries = 0; }
   const alts = imgAlternatives(im.dataset.orig).filter(x => x !== im.dataset.orig);
@@ -114,7 +114,7 @@ const imgSeen = new WeakMap();
 setInterval(() => {
   const now = Date.now();
   document.querySelectorAll('img[src]').forEach(im => {
-    if (im.complete || im.getAttribute('src').startsWith('data:')) { imgSeen.delete(im); return; }
+    if (im.complete || im.getAttribute('src').startsWith('data:') || im.classList.contains('pf-img')) { imgSeen.delete(im); return; }
     const s = imgSeen.get(im);
     if (!s || s.src !== im.src) imgSeen.set(im, { src: im.src, t: now });
     else if (now - s.t > 12000) { imgSeen.delete(im); retryImg(im); }

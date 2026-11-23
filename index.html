@@ -120,6 +120,8 @@ body.in-view #app{visibility:hidden}
 .btn:active{border-radius:12px;transform:scale(.97)}
 .btn.tonal{background:var(--secondary-container);color:var(--on-secondary-container)}
 .btn .ic{width:20px;height:20px}
+.btn.text{background:transparent;color:var(--primary);padding:0 12px;height:40px}
+.btn.text:hover{box-shadow:none;background:color-mix(in srgb,var(--primary) 10%,transparent)}
 .icb{position:relative;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;color:var(--fg2);transition:background .2s,border-radius .35s var(--spring),transform .2s,color .2s}
 .icb:hover{background:var(--hover)}
 .icb:active{border-radius:14px;background:var(--press)}
@@ -792,6 +794,34 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
 .acct-err{margin:0;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,#ff5449 18%,transparent);color:var(--fg);font-size:14px}
 .acct-note{margin:0;font-size:12.5px;color:var(--fg2)}
 @media (min-width:1000px){ .acct-btn{right:40px;top:14px} }
+/* perfiles (profile.js): avatar con foto o inicial, pulsable en cualquier sitio */
+.pf-av{position:relative;display:inline-grid;place-items:center;flex:none;overflow:hidden;border-radius:50%;cursor:pointer;
+  background:var(--primary-container);color:var(--on-primary-container);font-weight:700;user-select:none;-webkit-tap-highlight-color:transparent;transition:transform .3s var(--spring)}
+.pf-av:active{transform:scale(.92)}
+.pf-av:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.pf-av .pf-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:var(--primary-container)}
+.pf-av.off{background:var(--surface-c-highest);color:var(--fg2)}
+.acct-avatar.pf-av{border-radius:0}
+.pf-sm{width:24px;height:24px;font-size:11px}
+.pf-big{width:132px;height:132px;font-size:54px;clip-path:var(--shape-cookie9);border-radius:0;cursor:default;font-variation-settings:"ROND" 100}
+.pf-big:active{transform:none}
+.pf-mid{width:88px;height:88px;font-size:36px;clip-path:var(--shape-cookie9);border-radius:0;cursor:default}
+.pf-hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:12px var(--gutter) 32px}
+.pf-name{margin:12px 0 0;font-size:30px;font-weight:700;overflow-wrap:anywhere}
+.pf-bio{margin:4px 0 0;max-width:420px;font-size:15.5px;line-height:1.45;white-space:pre-line;overflow-wrap:anywhere}
+.pf-since{margin:2px 0 0;font-size:13px}
+.pf-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:14px}
+.pf-actions:empty{display:none}
+.pf-empty{text-align:center;padding:40px 16px}
+.pf-photo{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.pf-photo-btns{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+.acct-form label.pf-pick{flex-direction:row;cursor:pointer;font-size:15px;color:var(--on-secondary-container);height:44px;padding:0 16px;white-space:nowrap;max-width:100%}
+.pf-photo-btns .btn.text{padding:0 8px}
+.pf-form textarea{width:100%;border-radius:12px;border:1px solid var(--outline);background:transparent;padding:12px 16px;outline:0;font:inherit;font-size:16px;color:var(--fg);resize:vertical;min-height:84px}
+.pf-form textarea:focus{border:2px solid var(--primary);padding:11px 15px}
+.pf-count{align-self:flex-end;font-weight:400;color:var(--fg2)}
+.rc-line{display:flex;align-items:flex-end;gap:6px;align-self:flex-start;max-width:88%}
+.rc-line .rc-msg{max-width:none}
 /* pantalla de bienvenida (inicio de sesión obligatorio en la web publicada) */
 #auth-gate{position:fixed;inset:0;z-index:40;display:grid;place-items:center;padding:24px 16px calc(24px + var(--safe-b));overflow-y:auto;
   background:radial-gradient(120% 80% at 50% 0%,var(--primary-container),var(--surface) 70%);animation:fade .3s}
@@ -1034,6 +1064,8 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></symbol>
   <symbol id="i-playnext" viewBox="0 0 24 24"><path d="M3 10h11v2H3zm0-4h11v2H3zm0 8h7v2H3zm13-1v8l6-4z"/></symbol>
   <symbol id="i-album" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 14.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9zm0-5.5a1 1 0 100 2 1 1 0 000-2z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><path d="M21 19V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></symbol>
   <symbol id="i-person" viewBox="0 0 24 24"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
   <symbol id="i-note" viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/></symbol>
   <symbol id="i-lib" viewBox="0 0 24 24"><path d="M4 6H2v14a2 2 0 002 2h14v-2H4V6zm16-4H8a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></symbol>
@@ -1157,6 +1189,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="glass.js"></script>
 <script src="app.js"></script>
 <script src="account.js"></script>
+<script src="profile.js"></script>
 <script src="features.js"></script>
 <script src="sources.js"></script>
 <script src="now.js"></script>

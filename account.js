@@ -205,6 +205,8 @@ const Account = (() => {
 
   /* ---------------------------------------------------------------- interfaz */
   const initial = n => esc((n || '?').trim().charAt(0).toUpperCase());
+  // avatar con foto (profile.js) o, si no está, la inicial de siempre
+  const avatar = n => window.Profile ? Profile.av(n, 'acct-avatar') : `<span class="acct-avatar" aria-hidden="true">${initial(n)}</span>`;
 
   // formulario de entrar / crear cuenta (lo usan la hoja y la pantalla de bienvenida)
   function buildForm(mode, onSwitch) {
@@ -278,6 +280,7 @@ const Account = (() => {
     App.sheet({
       title: user, sub: 'Tu música se guarda en tu cuenta', origin,
       items: [
+        window.Profile && { icon: 'person', label: 'Ver tu perfil', fn: () => Profile.open(user) },
         { icon: 'key', label: 'Cambiar contraseña', fn: () => changePassword() },
         { icon: 'back', label: 'Cerrar sesión', fn: () => logout() },
         { icon: 'close', label: 'Cerrar sesión en todos los dispositivos', fn: () => logoutAllAsk() }
@@ -294,10 +297,11 @@ const Account = (() => {
     }
     if (user) {
       box.innerHTML = `<h2 class="sec">Cuenta</h2><div class="group">
-        <div class="set" style="cursor:default"><span class="acct-avatar" aria-hidden="true">${initial(user)}</span><div class="lbl">${esc(user)}<small>Favoritas, listas, historial y búsquedas se guardan en tu cuenta y se sincronizan entre dispositivos</small></div></div>
+        <div class="set" data-acct="profile">${avatar(user)}<div class="lbl">${esc(user)}<small>Toca para ver y editar tu perfil (foto y descripción). Tus favoritas, listas e historial se sincronizan entre dispositivos</small></div></div>
         <div class="set" data-acct="password">${icon('key')}<div class="lbl">Cambiar contraseña<small>Se cerrará la sesión en tus otros dispositivos</small></div></div>
         <div class="set" data-acct="logout">${icon('back')}<div class="lbl">Cerrar sesión<small>Se borra la copia de tus datos de este dispositivo</small></div></div>
         <div class="set" data-acct="logout-all">${icon('close')}<div class="lbl">Cerrar sesión en todos los dispositivos</div></div></div>`;
+      box.querySelector('[data-acct=profile]').onclick = () => window.Profile ? Profile.open(user) : null;
       box.querySelector('[data-acct=logout]').onclick = () => logout();
       box.querySelector('[data-acct=password]').onclick = () => changePassword();
       box.querySelector('[data-acct=logout-all]').onclick = () => logoutAllAsk();
@@ -322,10 +326,13 @@ const Account = (() => {
       b = document.createElement('button');
       b.className = 'acct-btn';
       w.prepend(b);
-      b.onclick = () => accountMenu(b);
+      // con sesión abre tu perfil (desde ahí, editarlo y las opciones de la cuenta)
+      b.onclick = () => user && window.Profile ? Profile.open(user) : accountMenu(b);
     }
-    b.setAttribute('aria-label', user ? 'Cuenta de ' + user : 'Iniciar sesión');
-    b.innerHTML = user ? `<span class="acct-avatar">${initial(user)}</span>` : icon('person');
+    b.setAttribute('aria-label', user ? 'Tu perfil, ' + user : 'Iniciar sesión');
+    b.innerHTML = user ? avatar(user) : icon('person');
+    const a = b.querySelector('.pf-av');
+    if (a) { a.removeAttribute('role'); a.removeAttribute('tabindex'); a.removeAttribute('aria-label'); }
   }
 
   function renderAll() {
@@ -346,7 +353,7 @@ const Account = (() => {
   }, { once: true });
 
   return {
-    renderSlot, openSheet, logout, pullKeys,
+    renderSlot, openSheet, logout, pullKeys, accountMenu,
     get user() { return user; },
     get supported() { return supported; }
   };

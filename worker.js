@@ -15,6 +15,7 @@ import { onRequest } from './functions/api/[[path]].js';
 import { handleAccounts, requireSession } from './server/accounts.js';
 import { handleRooms } from './server/rooms.js';
 import { handleApi } from './server/api.js';
+import { handleProfiles } from './server/profiles.js';
 
 const CSP = [
   "default-src 'self'",
@@ -61,6 +62,8 @@ async function api(request, env, p, ctx) {
     if (/^(tokens|presence|remote)(\/|$)/.test(p)) return await handleApi(request, env, p);
     // escuchar juntos (salas)
     if (/^room(\/|$)/.test(p)) return await handleRooms(request, env, p, ctx);
+    // perfiles (foto y descripción)
+    if (/^profile(\/|$)/.test(p)) return await handleProfiles(request, env, p);
     // cuentas y datos de usuario (base de datos D1)
     if (/^(auth\/|data(\/|$))/.test(p)) return await handleAccounts(request, env, p);
     // todo lo demás (búsqueda, letras, Spotify, portadas) exige haber iniciado sesión

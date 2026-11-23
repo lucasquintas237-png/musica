@@ -32,6 +32,8 @@ const Together = (() => {
   const canCtl = () => !!(room && (room.isHost || room.control));
   const me = () => String((window.Account && Account.user) || '').toLowerCase();
   const isMe = name => String(name || '').toLowerCase() === me();
+  // avatar pulsable (abre el perfil) o, sin profile.js, la inicial
+  const pav = (name, cls) => window.Profile ? Profile.av(name, cls) : `<span class="${cls}" aria-hidden="true">${esc(String(name || '?').slice(0, 1).toUpperCase())}</span>`;
   const KEY = 'mz:room';
 
   /* Reloj: cada respuesta del servidor (y cada "pong" del tiempo real) da una medida de la
@@ -475,7 +477,7 @@ const Together = (() => {
     const people = (rm.people || []).slice().sort((a, b) => (b.host - a.host) || (b.admin - a.admin) || a.name.localeCompare(b.name));
     people.forEach(p => {
       const badge = p.host ? 'Anfitrión' : p.admin ? 'Administrador' : '';
-      const row = el(`<div class="rp-row"><span class="rp-av" aria-hidden="true">${esc(p.name.slice(0, 1).toUpperCase())}</span>
+      const row = el(`<div class="rp-row">${pav(p.name, 'rp-av')}
         <span class="rp-name">${esc(p.name)}${p.me ? ' (tú)' : ''}${badge ? `<small>${badge}</small>` : ''}</span></div>`);
       if (room.isHost && !p.host && !p.me) {
         const b = el(`<button class="icb" type="button" aria-label="Opciones de ${esc(p.name)}">${icon('more')}</button>`);
@@ -487,7 +489,7 @@ const Together = (() => {
     if (room.isHost && rm.bans && rm.bans.length) {
       box.appendChild(el('<p class="rp-sec">Bloqueados</p>'));
       rm.bans.forEach(x => {
-        const row = el(`<div class="rp-row"><span class="rp-av off" aria-hidden="true">${esc(x.name.slice(0, 1).toUpperCase())}</span>
+        const row = el(`<div class="rp-row">${pav(x.name, 'rp-av off')}
           <span class="rp-name">${esc(x.name)}<small>${x.scope === 'all' ? 'En todas tus salas' : 'En esta sala'}</small></span>
           <button class="btn tonal rp-un" type="button">Desbloquear</button></div>`);
         row.querySelector('.rp-un').onclick = () => hostAct('unban', x.name, { scope: x.scope }, `${x.name} desbloqueado`);
@@ -512,7 +514,8 @@ const Together = (() => {
       const t = x.track;
       const row = el(`<div class="rq-row"><img class="rq-art" src="${esc(small(t.cover) || PLACEHOLDER)}" alt="">
         <span class="rq-txt"><b class="ellipsis">${esc(t.title)}</b><small class="ellipsis">${esc(t.artist)}</small></span>
-        <span class="rq-by" title="Añadida por ${esc(x.by)}">${esc(x.by.slice(0, 1).toUpperCase())}</span></div>`);
+        ${pav(x.by, 'rq-by')}</div>`);
+      const by = row.querySelector('.rq-by'); if (by) by.title = 'Añadida por ' + x.by;
       if (x.mine || canCtl()) {
         const b = el(`<button class="icb" type="button" aria-label="Quitar de la cola">${icon('close')}</button>`);
         b.onclick = () => removeFromQueue(x.qid);
@@ -557,7 +560,8 @@ const Together = (() => {
     box.innerHTML = '';
     if (!chat.length) { box.appendChild(el('<p class="muted rc-empty">Di algo a la sala 👋</p>')); return; }
     chat.slice(-30).forEach(m => {
-      box.appendChild(el(`<div class="rc-msg${isMe(m.by) ? ' me' : ''}"><b>${esc(m.by)}</b><span>${esc(m.data.text)}</span></div>`));
+      const msg = `<div class="rc-msg${isMe(m.by) ? ' me' : ''}"><b>${esc(m.by)}</b><span>${esc(m.data.text)}</span></div>`;
+      box.appendChild(el(isMe(m.by) || !window.Profile ? msg : `<div class="rc-line">${pav(m.by, 'pf-sm')}${msg}</div>`));
     });
     box.scrollTop = box.scrollHeight;
   }
