@@ -15,6 +15,11 @@ const Features = (() => {
     root.classList.toggle('amoled', !!s.amoled);
     root.classList.toggle('hc', !!s.contrast);
     root.dataset.fs = String(s.fontSize || 0);
+    // reproductor: portada viva, modo vinilo y letra gigante de fondo
+    root.classList.toggle('live-cover', s.liveCover !== false);
+    root.classList.toggle('vinyl-mode', !!s.vinyl);
+    root.classList.toggle('bg-lyrics', s.bgLyrics !== false);
+    if (window.App && App.placeVinyl) App.placeVinyl();
     M3.applyColor();
     window.Liquid && Liquid.refresh && Liquid.refresh();
   }
@@ -718,6 +723,9 @@ const Features = (() => {
         <div class="set" data-t="contrast">${icon('info')}<div class="lbl">Alto contraste<small>Textos secundarios y bordes más marcados</small></div>${sw(!!s.contrast)}</div>
         <div class="set" style="cursor:default">${icon('keyboard')}<div class="lbl">Tamaño de letra</div>
           <div class="seg" id="seg-fs">${[[0, 'Normal'], [1, 'Grande'], [2, 'Muy grande']].map(([v, l]) => `<button data-v="${v}" class="${(+s.fontSize || 0) === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+        <div class="set" data-k="liveCover">${icon('album')}<div class="lbl">Portada viva<small>Mientras suena, la portada se acerca y se mueve muy despacio</small></div>${sw(s.liveCover !== false)}</div>
+        <div class="set" data-t="vinyl">${icon('album')}<div class="lbl">Modo vinilo<small>La portada se convierte en un disco que gira, con su brazo</small></div>${sw(!!s.vinyl)}</div>
+        <div class="set" data-k="bgLyrics">${icon('lyrics')}<div class="lbl">Letra de fondo<small>La línea que suena, gigante y desenfocada detrás del reproductor</small></div>${sw(s.bgLyrics !== false)}</div>
         <div class="set" data-k="animBg">${icon('radio')}<div class="lbl">Fondo animado al ritmo<small>El color de fondo se mueve y late con el BPM mientras suena música</small></div>${sw(s.animBg !== false)}</div>
         <div class="set" data-k="aura">${icon('bolt')}<div class="lbl">Aura en la barra<small>Un borde de luz con los colores de la portada que gira y late al ritmo de la canción</small></div>${sw(s.aura !== false)}</div>
       </div>
@@ -769,6 +777,7 @@ const Features = (() => {
       setSetting(k, v);
       if (k === 'dynamic') M3.setEnabled(v);
       if (k === 'aura') document.documentElement.classList.toggle('no-aura', !v);
+      if (k === 'liveCover' || k === 'bgLyrics') applyTheme();
       if (k === 'autoRadio') App.state.autoRadio = v;
       if (k === 'keepAwake') syncAwake();
       refreshSettings();
@@ -818,7 +827,41 @@ const Features = (() => {
     const panel = $('#player .p-panel');
     if (!panel.hidden && panel.dataset.kind === 'queue') renderQueue(panel);
   });
-  App.on('time', ({ cur }) => syncLyrics(cur));
+  App.on('time', ({ cur }) => { syncLyrics(cur); bgLyrics(cur); });
+
+  /* Letra de fondo: la línea que suena, gigante y desenfocada detrás del reproductor. Solo con el
+     reproductor abierto (así no se piden letras sin necesidad); si el panel de letra ya la tiene
+     cargada, se usa esa. */
+  const bgl = { id: null, lines: [], cur: -2, loading: false };
+  function setBgLine(text) {
+    const box = $('#player .p-lyrbg'), sp = box && box.firstChild;
+    if (!sp || sp.textContent === text) return;
+    box.classList.add('swap');
+    clearTimeout(setBgLine._t);
+    setBgLine._t = setTimeout(() => { sp.textContent = text; box.classList.remove('swap'); }, 260);
+  }
+  async function bgLyrics(cur) {
+    const t = App.current;
+    if (!t || settings().bgLyrics === false || !$('#player').classList.contains('open')) return;
+    if (bgl.id !== t.id) {
+      if (bgl.loading) return;
+      bgl.id = t.id; bgl.lines = []; bgl.cur = -2; setBgLine('');
+      if (lyr.id === t.id && lyr.lines.length) bgl.lines = lyr.lines;
+      else {
+        bgl.loading = true;
+        try { const d = await fetchLyrics(t); if (App.current === t && d && d.syncedLyrics) bgl.lines = parseLRC(d.syncedLyrics); } catch (_) {}
+        bgl.loading = false;
+      }
+    }
+    if (!bgl.lines.length) return;
+    const o = offsets()[t.id] != null ? offsets()[t.id] : (lyr.id === t.id ? lyr.auto || 0 : 0);
+    const at = cur - o;
+    let i = -1;
+    for (let k = 0; k < bgl.lines.length; k++) { if (bgl.lines[k].t <= at + .2) i = k; else break; }
+    if (i === bgl.cur) return;
+    bgl.cur = i;
+    setBgLine(i >= 0 ? (bgl.lines[i].text || '') : '');
+  }
 
   return {
     renderSearch, renderSettings, refreshSettings, togglePanel, startRadio, extendRadio, timerMenu, consumeEndOfTrack,

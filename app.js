@@ -621,7 +621,8 @@ const App = {
       if (!Player.ready) return Player.blockedHelp();
       let st = -1;
       try { st = Player.yt.getPlayerState(); } catch (_) {}
-      if (st === -1 || st === 5 || st === 2) toast('No empieza a sonar: toca ▶. Si sigue sin sonar, revisa el volumen y que el móvil no esté en silencio.', 6000);
+      // solo si ni siquiera ha empezado (en pausa puede ser que la hayas parado tú)
+      if ((st === -1 || st === 5) && Date.now() - (Player.pausedAt || 0) > 9000) toast('No empieza a sonar: toca ▶. Si sigue sin sonar, revisa el volumen y que el móvil no esté en silencio.', 6000);
       else if (st === 3) toast('La canción tarda en cargar: la conexión va lenta', 4000);
     }, 8000);
     this._counted = false;
@@ -773,6 +774,13 @@ const App = {
     const r = $('#player [data-act=repeat]');
     r.classList.toggle('on', s.repeat !== 'off');
     $('use', r).setAttribute('href', s.repeat === 'one' ? '#i-repeat1' : '#i-repeat');
+  },
+  // modo vinilo: el disco (y su brazo) se coloca justo debajo de la portada, mida lo que mida
+  placeVinyl() {
+    const v = $('#player .vinyl'), c = $('#player .p-cover');
+    if (!v || !c) return;
+    v.style.left = c.offsetLeft + 'px'; v.style.top = c.offsetTop + 'px';
+    v.style.width = c.offsetWidth + 'px'; v.style.height = c.offsetHeight + 'px';
   },
   highlight() {
     const id = this.current && this.current.id, vid = this.current && this.current.vid;
@@ -1252,6 +1260,9 @@ const App = {
     stage.addEventListener('pointerdown', e => { if (!$('#player .p-panel').hidden) return; y0 = e.clientY; });
     addEventListener('pointerup', e => { if (y0 != null && e.clientY - y0 > 90) this.closePlayer(); y0 = null; });
 
+    // el disco del modo vinilo sigue el tamaño de la portada
+    if ('ResizeObserver' in window) new ResizeObserver(() => this.placeVinyl()).observe($('#player .p-cover'));
+    addEventListener('resize', () => this.placeVinyl());
     // botón atrás del navegador/Android
     addEventListener('popstate', () => {
       if (M3.menuOpen) { M3.closeMenu(); return; }
