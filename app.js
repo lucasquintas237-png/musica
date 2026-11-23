@@ -404,7 +404,7 @@ const Player = {
     else this.yt.cueVideoById({ videoId: id, startSeconds: start });
   },
   play() { this.ready && this.yt.playVideo(); },
-  pause() { if (!this.ready) return; if (this.fading) this.finishFade(); this.yt.pauseVideo(); },
+  pause() { if (!this.ready) return; this.pausedAt = Date.now(); if (this.fading) this.finishFade(); this.yt.pauseVideo(); },
   stop() { this.ready && this.yt.stopVideo(); },
   seek(s) { if (!this.ready) return; if (this.fading) this.abortFade(); this.yt.seekTo(s, true); },
   time() { return this.ready && this.yt.getCurrentTime ? this.yt.getCurrentTime() || 0 : 0; },
@@ -616,11 +616,14 @@ const App = {
     }
     Player.load(t.id, startAt, autoplay);
     // si a los 8 s no ha empezado a sonar, se dice por qué (en vez de no hacer nada)
+    const loadedAt = Date.now();
     if (autoplay) setTimeout(() => {
       if (tok !== this._tok || this.state.playing) return;
       if (!Player.ready) return Player.blockedHelp();
       let st = -1;
       try { st = Player.yt.getPlayerState(); } catch (_) {}
+      // en pausa porque la has pausado tú (o la sala): no es un fallo
+      if (st === 2 && (Player.pausedAt || 0) >= loadedAt) return;
       if (st === -1 || st === 5 || st === 2) toast('No empieza a sonar: toca ▶. Si sigue sin sonar, revisa el volumen y que el móvil no esté en silencio.', 6000);
       else if (st === 3) toast('La canción tarda en cargar: la conexión va lenta', 4000);
     }, 8000);
@@ -1029,6 +1032,7 @@ const App = {
         { icon: 'radio', label: 'Iniciar radio', fn: () => Features.startRadio(t) },
         { icon: 'lib', label: 'Añadir a una lista', fn: () => this.pickPlaylist(t) },
         { icon: fav ? 'heart-f' : 'heart', label: fav ? 'Quitar de favoritas' : 'Añadir a favoritas', fn: () => { Library.toggleFav(t); this.updateFav(); } },
+        t.id && window.Profile && Profile.on() && { icon: 'person', label: 'Poner en mi perfil', fn: () => Profile.setSong(t) },
         t.artistId && { icon: 'person', label: 'Ir al artista', fn: () => { this.closePlayer(); Features.openArtist(t.artistId, { title: t.artist }); } },
         t.albumId && { icon: 'album', label: 'Ir al álbum', fn: () => { this.closePlayer(); Features.openAlbum(t.albumId, { title: t.album }); } },
         opts.playlistId && { icon: 'trash', label: 'Quitar de esta lista', fn: () => { Library.removeFromPlaylist(opts.playlistId, i); opts.onRemove && opts.onRemove(); } },

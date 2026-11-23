@@ -4,6 +4,13 @@
      PUT    /api/profile                   -> {bio} cambia tu descripción
      PUT    /api/profile/avatar            -> cuerpo = la imagen (WebP o JPEG) cambia tu foto
      DELETE /api/profile/avatar            -> quita tu foto
+     GET    /api/profile/<nombre>?full=1   -> además: seguidores, si sois amigos, qué escucha (según
+                                              su privacidad), su sala, canción, artistas, listas
+                                              públicas y vuestra compatibilidad
+     PUT/DELETE /api/profile/<nombre>/follow   seguir / dejar de seguir (si os seguís, sois amigos)
+     GET    /api/profile/<nombre>/playlist/<id> una lista pública suya
+     GET    /api/friends                   -> a quién sigues (con lo que escuchan) y quién te sigue
+     PUT    /api/profile {song, share, top} -> canción del perfil y privacidad
 
    Seguridad de las subidas:
    - Aquí no hay PHP ni nada que se ejecute: es un Worker y la foto se guarda como DATOS en D1
@@ -17,8 +24,9 @@
      página; solo para usuarios con sesión.
    - Límite de subidas por persona y hora. Todas las consultas son parametrizadas (sin inyección SQL).
    - La descripción se limpia (sin caracteres de control, 160 como mucho) y se guarda cifrada. */
-import { schema, currentUser } from './accounts.js';
+import { schema, currentUser, readData } from './accounts.js';
 import { seal, open } from './crypto.js';
+import { presenceOf, ensureApiSchema, cleanTrack } from './api.js';
 
 const MAX_BYTES = 200 * 1024, MAX_SIDE = 1024, BIO_MAX = 160;
 const USER_RE = /^[a-z0-9_.-]{3,24}$/i;
@@ -27,9 +35,52 @@ const err = (status, msg) => json(status, { error: msg });
 
 let ready = null;
 function profileSchema(db) {
-  if (!ready) ready = db.prepare('CREATE TABLE IF NOT EXISTS profiles (user_id INTEGER PRIMARY KEY, bio TEXT, avatar TEXT, avatar_type TEXT, avatar_v INTEGER, updated INTEGER NOT NULL)').run().catch(e => { ready = null; throw e; });
+  if (!ready) ready = db.batch([
+    db.prepare('CREATE TABLE IF NOT EXISTS profiles (user_id INTEGER PRIMARY KEY, bio TEXT, avatar TEXT, avatar_type TEXT, avatar_v INTEGER, updated INTEGER NOT NULL)'),
+    // preferencias del perfil (cifradas): canción del perfil, quién ve lo que escuchas, artistas
+    db.prepare('CREATE TABLE IF NOT EXISTS profile_prefs (user_id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated INTEGER NOT NULL)'),
+    // a quién sigue cada uno (si os seguís los dos, sois amigos)
+    db.prepare('CREATE TABLE IF NOT EXISTS follows (user_id INTEGER NOT NULL, target_id INTEGER NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (user_id, target_id))'),
+    db.prepare('CREATE INDEX IF NOT EXISTS follows_target ON follows (target_id)')
+  ]).catch(e => { ready = null; throw e; });
   return ready;
 }
+const SHARE = ['all', 'friends', 'none'];
+const DEF_PREFS = { song: null, share: 'friends', top: true };
+async function prefsOf(env, row) {
+  if (!row || !row.data) return { ...DEF_PREFS };
+  try { return { ...DEF_PREFS, ...JSON.parse(await open(env, row.user_id + ':prefs', row.data)) }; } catch (_) { return { ...DEF_PREFS }; }
+}
+// lo que más escucha alguien, por artista (de sus estadísticas)
+function artistWeights(stats) {
+  const by = new Map();
+  Object.values((stats && stats.plays) || {}).forEach(e => {
+    if (!e || !e.t) return;
+    const name = String(e.t.artist || '').split(/,|&| y | feat\.? /i)[0].trim();
+    if (!name) return;
+    const a = by.get(name.toLowerCase()) || { name, artistId: e.t.artistId || '', secs: 0 };
+    a.secs += +e.secs || 0;
+    if (!a.artistId && e.t.artistId) a.artistId = e.t.artistId;
+    by.set(name.toLowerCase(), a);
+  });
+  return [...by.values()].filter(a => a.secs > 0).sort((a, b) => b.secs - a.secs);
+}
+// compatibilidad: cuánto se parece el reparto de escucha por artistas (0–100)
+function compat(a, b) {
+  if (a.length < 3 || b.length < 3) return null;
+  const tot = l => l.reduce((s, x) => s + x.secs, 0);
+  const ta = tot(a), tb = tot(b), mb = new Map(b.map(x => [x.name.toLowerCase(), x]));
+  let overlap = 0; const common = [];
+  a.forEach(x => {
+    const y = mb.get(x.name.toLowerCase());
+    if (!y) return;
+    overlap += Math.min(x.secs / ta, y.secs / tb);
+    common.push({ name: x.name, artistId: x.artistId || y.artistId || '', w: x.secs / ta + y.secs / tb });
+  });
+  return { pct: Math.round(100 * Math.pow(overlap, .55)), common: common.sort((p, q) => q.w - p.w).slice(0, 6).map(({ name, artistId }) => ({ name, artistId })) };
+}
+const publicLists = pls => (Array.isArray(pls) ? pls : []).filter(p => p && p.pub).slice(0, 30);
+const ROOM_LIVE = 15 * 60e3;
 
 /* ---------------------------------------------------------------- comprobación de imágenes */
 const u32le = (b, i) => b[i] | b[i + 1] << 8 | b[i + 2] << 16 | (b[i + 3] << 24 >>> 0);
@@ -113,11 +164,28 @@ export async function handleProfiles(request, env, path) {
   if (path === 'profile' && m === 'PUT') {
     let b = {};
     try { b = await request.json(); } catch (_) { return err(400, 'Datos no válidos'); }
-    const bio = cleanBio(b.bio);
-    await db.prepare('INSERT INTO profiles (user_id, bio, updated) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET bio = excluded.bio, updated = excluded.updated')
-      .bind(me.id, bio ? await seal(env, me.id + ':bio', bio) : '', Date.now()).run();
-    return json(200, { ok: true, bio });
+    if (!b || typeof b !== 'object') return err(400, 'Datos no válidos');
+    const out = { ok: true };
+    if ('bio' in b) {
+      const bio = out.bio = cleanBio(b.bio);
+      await db.prepare('INSERT INTO profiles (user_id, bio, updated) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET bio = excluded.bio, updated = excluded.updated')
+        .bind(me.id, bio ? await seal(env, me.id + ':bio', bio) : '', Date.now()).run();
+    }
+    if ('song' in b || 'share' in b || 'top' in b) {
+      const row = await db.prepare('SELECT user_id, data FROM profile_prefs WHERE user_id = ?').bind(me.id).first();
+      const p = await prefsOf(env, row);
+      if ('song' in b) p.song = b.song ? cleanTrack(b.song) : null;
+      if ('share' in b) { if (!SHARE.includes(b.share)) return err(400, 'Valor no válido'); p.share = b.share; }
+      if ('top' in b) p.top = !!b.top;
+      await db.prepare('INSERT INTO profile_prefs (user_id, data, updated) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated = excluded.updated')
+        .bind(me.id, await seal(env, me.id + ':prefs', JSON.stringify({ song: p.song, share: p.share, top: p.top })), Date.now()).run();
+      out.prefs = { song: p.song, share: p.share, top: p.top };
+    }
+    return json(200, out);
   }
+
+  // ---- amigos: a quién sigues, con lo que escuchan (si lo comparten) y si tienen sala abierta
+  if (path === 'friends' && m === 'GET') return json(200, await friends(env, db, me));
   if (path === 'profile/avatar' && m === 'PUT') {
     if (tooMany(me.id)) return err(429, 'Has cambiado la foto demasiadas veces; prueba dentro de un rato');
     const len = +request.headers.get('Content-Length') || 0;
@@ -136,15 +204,35 @@ export async function handleProfiles(request, env, path) {
   }
 
   // ---- el de cualquiera (por nombre)
-  const mm = path.match(/^profile\/([^/]{1,40})(\/avatar)?$/);
-  if (!mm || m !== 'GET') return err(404, 'api');
+  const mm = path.match(/^profile\/([^/]{1,40})(?:\/(avatar|follow|playlist\/([\w-]{1,40})))?$/);
+  if (!mm) return err(404, 'api');
+  const sub = mm[2] || '', isFollow = sub === 'follow';
+  if (isFollow ? !['PUT', 'DELETE'].includes(m) : m !== 'GET') return err(405, 'Método no permitido');
   let name;
   try { name = decodeURIComponent(mm[1]); } catch (_) { return err(400, 'Nombre no válido'); }
   if (!USER_RE.test(name)) return err(404, 'No existe esa persona');
-  const u = await db.prepare('SELECT u.id, u.username, u.created, p.bio, p.avatar_v, p.avatar_type' + (mm[2] ? ', p.avatar' : '') + ' FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.username = ?').bind(name).first();
+  const u = await db.prepare('SELECT u.id, u.username, u.created, p.bio, p.avatar_v, p.avatar_type' + (sub === 'avatar' ? ', p.avatar' : '') + ' FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.username = ?').bind(name).first();
   if (!u) return err(404, 'No existe esa persona');
 
-  if (mm[2]) {
+  // seguir / dejar de seguir
+  if (isFollow) {
+    if (u.id === me.id) return err(400, 'No puedes seguirte a ti');
+    if (m === 'PUT') {
+      const n = await db.prepare('SELECT COUNT(*) AS n FROM follows WHERE user_id = ?').bind(me.id).first();
+      if (n && n.n >= 500) return err(400, 'Sigues a demasiada gente (máximo 500)');
+      await db.prepare('INSERT OR IGNORE INTO follows (user_id, target_id, created) VALUES (?, ?, ?)').bind(me.id, u.id, Date.now()).run();
+    } else await db.prepare('DELETE FROM follows WHERE user_id = ? AND target_id = ?').bind(me.id, u.id).run();
+    return json(200, { ok: true, following: m === 'PUT' });
+  }
+
+  // una lista pública de esa persona, con sus canciones
+  if (sub.startsWith('playlist/')) {
+    const pl = publicLists(await readData(env, db, u.id, 'playlists', [])).find(p => p.id === mm[3]);
+    if (!pl) return err(404, 'Esa lista no existe o no es pública');
+    return json(200, { id: pl.id, name: String(pl.name || '').slice(0, 100), owner: u.username, tracks: (pl.tracks || []).slice(0, 500).map(cleanTrack).filter(Boolean) });
+  }
+
+  if (sub === 'avatar') {
     if (!u.avatar || !/^image\/(webp|jpeg)$/.test(u.avatar_type || '')) return new Response(null, { status: 404, headers: { 'Cache-Control': 'private, max-age=300' } });
     const bytes = unb64(u.avatar);
     const fresh = new URL(request.url).searchParams.get('v') === String(u.avatar_v);
@@ -160,5 +248,84 @@ export async function handleProfiles(request, env, path) {
   }
   let bio = '';
   if (u.bio) { try { bio = await open(env, u.id + ':bio', u.bio); } catch (_) { bio = ''; } }
-  return json(200, { username: u.username, bio, avatar: u.avatar_v || null, since: u.created, me: u.id === me.id });
+  const base = { username: u.username, bio, avatar: u.avatar_v || null, since: u.created, me: u.id === me.id };
+  if (!new URL(request.url).searchParams.get('full')) return json(200, base);
+  return json(200, { ...base, ...(await fullProfile(env, db, me, u)) });
+}
+
+/* ---------------------------------------------------------------- perfil completo */
+async function fullProfile(env, db, me, u) {
+  const mine = u.id === me.id;
+  await ensureApiSchema(db);
+  const [rel, pref, pres] = await db.batch([
+    db.prepare(`SELECT (SELECT COUNT(*) FROM follows WHERE target_id = ?1) AS followers, (SELECT COUNT(*) FROM follows WHERE user_id = ?1) AS following,
+      (SELECT 1 FROM follows WHERE user_id = ?2 AND target_id = ?1) AS iFollow, (SELECT 1 FROM follows WHERE user_id = ?1 AND target_id = ?2) AS followsMe`).bind(u.id, me.id),
+    db.prepare('SELECT user_id, data FROM profile_prefs WHERE user_id = ?').bind(u.id),
+    db.prepare('SELECT user_id, state, updated FROM presence WHERE user_id = ?').bind(u.id)
+  ]);
+  const r = (rel.results || [])[0] || {};
+  const prefs = await prefsOf(env, (pref.results || [])[0]);
+  const friends = !!(r.iFollow && r.followsMe);
+  const sees = mine || prefs.share === 'all' || (prefs.share === 'friends' && friends);
+  const out = {
+    followers: r.followers || 0, following: r.following || 0, iFollow: !!r.iFollow, followsMe: !!r.followsMe, friends,
+    song: prefs.song || null, now: null, room: null, top: [], playlists: [], compat: null
+  };
+  if (mine) out.prefs = { share: prefs.share, top: prefs.top };
+  if (sees) out.now = (await presenceOf(env, pres.results)).get(u.id) || null;
+  // su sala abierta (solo para amigos, que así pueden entrar sin pedir el código)
+  if (friends || mine) {
+    try {
+      const rm = await db.prepare('SELECT code, updated FROM rooms WHERE host_id = ? ORDER BY updated DESC LIMIT 1').bind(u.id).first();
+      if (rm && Date.now() - rm.updated < ROOM_LIVE) out.room = rm.code;
+    } catch (_) {}
+  }
+  const [theirStats, theirLists, myStats] = await Promise.all([
+    readData(env, db, u.id, 'stats', { plays: {} }),
+    readData(env, db, u.id, 'playlists', []),
+    mine ? null : readData(env, db, me.id, 'stats', { plays: {} })
+  ]);
+  const theirs = artistWeights(theirStats);
+  if (prefs.top || mine) out.top = theirs.slice(0, 6).map(({ name, artistId }) => ({ name, artistId }));
+  out.playlists = publicLists(theirLists).map(p => {
+    const t = (p.tracks || []).find(x => x && x.cover);
+    return { id: String(p.id).slice(0, 40), name: String(p.name || '').slice(0, 100), total: (p.tracks || []).length, cover: t ? String(t.cover).slice(0, 500) : '' };
+  });
+  if (!mine) out.compat = compat(artistWeights(myStats), theirs);
+  return out;
+}
+
+async function friends(env, db, me) {
+  await ensureApiSchema(db);
+  const [fl, back] = await db.batch([
+    db.prepare(`SELECT u.id, u.username, p.avatar_v, (SELECT 1 FROM follows b WHERE b.user_id = u.id AND b.target_id = ?1) AS mutual
+      FROM follows f JOIN users u ON u.id = f.target_id LEFT JOIN profiles p ON p.user_id = u.id WHERE f.user_id = ?1 ORDER BY f.created DESC LIMIT 200`).bind(me.id),
+    // quien te sigue y tú aún no
+    db.prepare(`SELECT u.username, p.avatar_v FROM follows f JOIN users u ON u.id = f.user_id LEFT JOIN profiles p ON p.user_id = u.id
+      WHERE f.target_id = ?1 AND NOT EXISTS (SELECT 1 FROM follows b WHERE b.user_id = ?1 AND b.target_id = f.user_id) ORDER BY f.created DESC LIMIT 50`).bind(me.id)
+  ]);
+  const list = fl.results || [];
+  const ids = list.map(x => x.id);
+  let pres = new Map(), prefs = new Map(), rooms = new Map();
+  if (ids.length) {
+    const q = ids.map(() => '?').join(',');
+    const [pr, pf] = await db.batch([
+      db.prepare(`SELECT user_id, state, updated FROM presence WHERE user_id IN (${q})`).bind(...ids),
+      db.prepare(`SELECT user_id, data FROM profile_prefs WHERE user_id IN (${q})`).bind(...ids)
+    ]);
+    pres = await presenceOf(env, pr.results);
+    for (const row of pf.results || []) prefs.set(row.user_id, await prefsOf(env, row));
+    try {   // la tabla de salas puede no existir aún
+      const { results } = await db.prepare(`SELECT host_id, code FROM rooms WHERE host_id IN (${q}) AND updated > ?`).bind(...ids, Date.now() - ROOM_LIVE).all();
+      (results || []).forEach(x => rooms.set(x.host_id, x.code));
+    } catch (_) {}
+  }
+  const people = list.map(x => {
+    const p = prefs.get(x.id) || DEF_PREFS, mutual = !!x.mutual;
+    const sees = p.share === 'all' || (p.share === 'friends' && mutual);
+    return { username: x.username, avatar: x.avatar_v || null, mutual, now: sees ? pres.get(x.id) || null : null, room: mutual ? rooms.get(x.id) || null : null };
+  });
+  // primero quien está escuchando algo
+  people.sort((a, b) => (!!b.now - !!a.now) || (!!(b.now && b.now.playing) - !!(a.now && a.now.playing)));
+  return { people, followers: (back.results || []).map(x => ({ username: x.username, avatar: x.avatar_v || null })) };
 }

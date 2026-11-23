@@ -63,7 +63,7 @@ async function api(request, env, p, ctx) {
     // escuchar juntos (salas)
     if (/^room(\/|$)/.test(p)) return await handleRooms(request, env, p, ctx);
     // perfiles (foto y descripción)
-    if (/^profile(\/|$)/.test(p)) return await handleProfiles(request, env, p);
+    if (/^(profile|friends)(\/|$)/.test(p)) return await handleProfiles(request, env, p);
     // cuentas y datos de usuario (base de datos D1)
     if (/^(auth\/|data(\/|$))/.test(p)) return await handleAccounts(request, env, p);
     // todo lo demás (búsqueda, letras, Spotify, portadas) exige haber iniciado sesión

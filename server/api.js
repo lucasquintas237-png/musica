@@ -40,7 +40,7 @@ function apiSchema(db) {
 const body = async request => { try { return await request.json(); } catch (_) { return {}; } };
 const s = (v, n) => String(v == null ? '' : v).slice(0, n);
 const isVid = id => /^[\w-]{11}$/.test(id || '');
-function cleanTrack(t) {
+export function cleanTrack(t) {
   if (!t || typeof t !== 'object' || !isVid(t.id)) return null;
   return { id: t.id, title: s(t.title, 200), artist: s(t.artist, 200), artistId: s(t.artistId, 64), album: s(t.album, 200), albumId: s(t.albumId, 64), dur: +t.dur || 0, cover: s(t.cover, 500) };
 }
@@ -73,6 +73,24 @@ async function nowPlaying(db, uid) {
   if (st.track && st.track.dur) pos = Math.min(pos, st.track.dur);
   return { online, playing, track: st.track || null, position: Math.round(pos * 10) / 10, duration: (st.track && st.track.dur) || 0, volume: st.volume ?? null, shuffle: !!st.shuffle, repeat: st.repeat || 'off', device: st.deviceName || '', updated: r.updated };
 }
+
+// qué suena para otra parte del servidor (perfiles y amigos); con los datos ya leídos de la tabla
+export async function presenceOf(env, rows) {
+  const out = new Map(), now = Date.now();
+  for (const r of rows || []) {
+    try {
+      const st = JSON.parse(await open(env, r.user_id + ':presence', r.state));
+      const online = !st.closed && now - r.updated < ONLINE;
+      if (!online || !st.track) continue;
+      let pos = +st.pos || 0;
+      if (st.playing) pos += (now - (st.at || r.updated)) / 1000;
+      if (st.track.dur) pos = Math.min(pos, st.track.dur);
+      out.set(r.user_id, { playing: !!st.playing, track: st.track, position: Math.round(pos), duration: st.track.dur || 0 });
+    } catch (_) {}
+  }
+  return out;
+}
+export const ensureApiSchema = db => apiSchema(db);
 
 /* ---------------------------------------------------------------- límite de peticiones */
 const hits = new Map();

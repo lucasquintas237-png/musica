@@ -104,16 +104,28 @@ const Profile = (() => {
     // si ya estás viendo ese perfil, no se apila otro igual
     const top = App.views[App.views.length - 1];
     if (top && top.dataset.profile && key(top.dataset.profile) === key(name)) return;
-    const v = App.openView('Perfil', box => {
-      box.innerHTML = '';
-      const sp = App.loading(box);
-      get(name, true).then(p => { sp.remove(); render(box, p); }).catch(e => {
-        sp.remove();
-        box.appendChild(el(`<p class="muted pf-empty">${esc(e.message || 'No se pudo cargar el perfil')}</p>`));
-      });
-    });
+    const v = App.openView('Perfil', box => load(box, name));
     v.dataset.profile = name;
   }
+  // (re)carga el perfil completo en la vista
+  async function load(box, name) {
+    box.innerHTML = '';
+    const sp = App.loading(box);
+    try {
+      const r = await fetch('/api/profile/' + encodeURIComponent(name) + '?full=1', { credentials: 'same-origin' });
+      let j = null; try { j = await r.json(); } catch (_) {}
+      if (!r.ok || !j) throw new Error((j && j.error) || 'No se pudo cargar el perfil');
+      const c = { username: j.username, bio: j.bio || '', avatar: j.avatar || null, since: +j.since || 0, me: !!j.me, t: Date.now() };
+      cache.set(key(j.username), c);
+      paint(c);
+      sp.remove();
+      render(box, j);
+    } catch (e) {
+      sp.remove();
+      box.appendChild(el(`<p class="muted pf-empty">${esc(e.message || 'No se pudo cargar el perfil')}</p>`));
+    }
+  }
+  const plural = (n, one, many) => `<b>${n}</b> ${n === 1 ? one : many}`;
   function render(box, p) {
     box.innerHTML = '';
     const mine = p.me || key(p.username) === key(Account.user);
@@ -121,6 +133,7 @@ const Profile = (() => {
       ${av(p.username, 'pf-big')}
       <h1 class="pf-name"></h1>
       <p class="pf-bio"></p>
+      <p class="pf-stats"><button type="button" data-f="1">${plural(p.followers || 0, 'seguidor', 'seguidores')}</button> · <button type="button" data-f="1">${plural(p.following || 0, 'siguiendo', 'siguiendo')}</button>${p.followsMe && !mine ? ` <span class="pf-tag">${p.friends ? 'Sois amigos' : 'Te sigue'}</span>` : ''}</p>
       ${p.since ? `<p class="muted pf-since">Miembro desde ${esc(monthYear(p.since))}</p>` : ''}
       <div class="pf-actions"></div>
     </div>`);
@@ -131,15 +144,260 @@ const Profile = (() => {
     bio.hidden = !p.bio && !mine;
     const big = h.querySelector('.pf-big');
     big.removeAttribute('role'); big.removeAttribute('tabindex');
+    h.querySelectorAll('[data-f]').forEach(b => { b.disabled = !mine; if (mine) b.onclick = () => openFriends(); });
+    const act = h.querySelector('.pf-actions');
     if (mine) {
-      const act = h.querySelector('.pf-actions');
       const ed = el(`<button class="btn" type="button">${icon('edit')}<span>Editar perfil</span></button>`);
-      ed.onclick = () => edit(p, () => render(box, cache.get(key(p.username)) || p));
-      const ac = el(`<button class="btn tonal" type="button">${icon('person')}<span>Cuenta</span></button>`);
+      ed.onclick = () => edit(p, () => load(box, p.username));
+      const fr = el(`<button class="btn tonal" type="button">${icon('people')}<span>Amigos</span></button>`);
+      fr.onclick = () => openFriends();
+      const ac = el(`<button class="btn tonal icon-only" type="button" aria-label="Cuenta">${icon('more')}</button>`);
       ac.onclick = () => Account.accountMenu(ac);
-      act.append(ed, ac);
+      act.append(ed, fr, ac);
+    } else {
+      const fb = el(`<button class="btn${p.iFollow ? ' tonal' : ''}" type="button"></button>`);
+      const label = () => { fb.innerHTML = p.iFollow ? `${icon('check')}<span>${p.friends ? 'Amigos' : 'Siguiendo'}</span>` : `${icon('plus')}<span>${p.followsMe ? 'Seguir también' : 'Seguir'}</span>`; fb.classList.toggle('tonal', !!p.iFollow); };
+      label();
+      fb.onclick = async () => {
+        fb.disabled = true;
+        const ok = await follow(p.username, !p.iFollow);
+        fb.disabled = false;
+        if (ok) load(box, p.username);
+      };
+      act.append(fb);
+    }
+    if (p.room && !mine) {
+      const rb = el(`<button class="btn tonal" type="button">${icon('people')}<span>Unirse a su sala</span></button>`);
+      rb.onclick = () => { window.Together && Together.join(p.room); };
+      act.append(rb);
     }
     box.appendChild(h);
+
+    // lo que está escuchando
+    if (p.now && p.now.track) box.appendChild(nowCard(p.now, p.username, mine));
+    // compatibilidad musical
+    if (p.compat) {
+      const c = p.compat;
+      const card = el(`<div class="pf-card pf-compat"><div class="pf-compat-top"><span>Compatibilidad musical</span><b>${c.pct}%</b></div>
+        <div class="pf-meter"><i style="width:${Math.max(3, Math.min(100, c.pct))}%"></i></div>
+        ${c.common.length ? `<p class="muted">Tenéis en común</p><div class="pf-chips"></div>` : '<p class="muted">Aún no tenéis artistas en común</p>'}</div>`);
+      chips(card.querySelector('.pf-chips'), c.common);
+      box.appendChild(card);
+    }
+    // canción del perfil
+    if (p.song && p.song.id) {
+      box.appendChild(App.section(mine ? 'Tu canción' : 'Su canción'));
+      box.appendChild(App.trackList([p.song], { from: 'Perfil de ' + p.username }));
+    }
+    // artistas que más escucha
+    if (p.top && p.top.length) {
+      box.appendChild(App.section(mine ? 'Tus artistas más escuchados' : 'Lo que más escucha'));
+      const w = el('<div class="pf-chips pf-chips-pad"></div>');
+      chips(w, p.top);
+      box.appendChild(w);
+    }
+    // listas públicas
+    if (p.playlists && p.playlists.length) {
+      box.appendChild(App.section(mine ? 'Tus listas públicas' : 'Sus listas'));
+      box.appendChild(App.shelf(p.playlists.map(x => ({ ...x, title: x.name, sub: x.total + ' canciones', cover: x.cover || PLACEHOLDER })), x => openList(p.username, x.id)));
+    } else if (mine) {
+      box.appendChild(el('<p class="muted pf-hint">Puedes mostrar listas en tu perfil desde el menú «Más» de cada lista, y elegir tu canción desde el menú ⋯ de cualquier canción.</p>'));
+    }
+  }
+  function chips(box, list) {
+    if (!box) return;
+    (list || []).forEach(a => {
+      const b = el(`<button class="pf-chip" type="button"></button>`);
+      b.textContent = a.name;
+      if (a.artistId) b.onclick = () => Features.openArtist(a.artistId, { title: a.name });
+      else b.onclick = () => { Glass.select('search'); setTimeout(() => Features.doSearch && Features.doSearch(a.name), 50); };
+      box.appendChild(b);
+    });
+  }
+  const fmtT = s => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+  // tarjeta "Escuchando ahora": al tocarla suena lo mismo, por el mismo punto
+  function nowCard(n, who, mine) {
+    const t = n.track, pct = n.duration ? Math.min(100, n.position / n.duration * 100) : 0;
+    const c = el(`<button type="button" class="pf-card pf-now${n.playing ? ' on' : ''}">
+      <img src="${esc(small(t.cover) || PLACEHOLDER)}" alt="">
+      <span class="pf-now-txt"><small>${n.playing ? (mine ? 'Estás escuchando' : 'Escuchando ahora') : 'En pausa'}</small>
+        <b class="ellipsis"></b><span class="ellipsis muted"></span>
+        <span class="pf-now-bar"><i style="width:${pct}%"></i></span><span class="pf-now-time muted">${fmtT(n.position)} / ${fmtT(n.duration)}</span></span>
+      ${mine ? '' : `<span class="pf-now-play" aria-hidden="true">${icon('play')}</span>`}</button>`);
+    c.querySelector('b').textContent = t.title;
+    c.querySelector('.pf-now-txt > .ellipsis.muted').textContent = t.artist;
+    if (!mine) {
+      c.setAttribute('aria-label', 'Escuchar lo mismo que ' + who);
+      c.onclick = () => listenWith(t, n, who);
+    } else c.disabled = true;
+    return c;
+  }
+  function listenWith(t, n, who) {
+    const at = n.playing ? n.position + 1 : n.position;
+    App.playList([t], 0, 'Con ' + who);
+    // cuando el reproductor la tenga cargada, se salta al mismo punto
+    let tries = 0;
+    const iv = setInterval(() => {
+      tries++;
+      if (window.Player && Player.ready && App.current && App.current.id === t.id && Player.duration() > 0) {
+        clearInterval(iv);
+        if (at > 3 && at < Player.duration() - 3) Player.seek(at + tries * .25);
+      } else if (tries > 40) clearInterval(iv);
+    }, 250);
+    toast('Escuchando lo mismo que ' + who);
+  }
+  async function follow(name, yes) {
+    try {
+      const r = await fetch('/api/profile/' + encodeURIComponent(name) + '/follow', { method: yes ? 'PUT' : 'DELETE', credentials: 'same-origin' });
+      let j = null; try { j = await r.json(); } catch (_) {}
+      if (!r.ok) { toast((j && j.error) || 'No se pudo'); return false; }
+      toast(yes ? 'Ahora sigues a ' + name : 'Has dejado de seguir a ' + name);
+      friendsCache = null;
+      return true;
+    } catch (_) { toast('No se pudo conectar con el servidor'); return false; }
+  }
+
+  /* ---------------------------------------------------------------- listas públicas de otros */
+  function openList(owner, id) {
+    App.openView('Lista', async box => {
+      const sp = App.loading(box);
+      try {
+        const r = await fetch(`/api/profile/${encodeURIComponent(owner)}/playlist/${encodeURIComponent(id)}`, { credentials: 'same-origin' });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error);
+        sp.remove();
+        const tracks = j.tracks || [], from = j.name;
+        const h = el(`<div class="hero"><img src="${esc(small((tracks.find(x => x.cover) || {}).cover) || PLACEHOLDER)}" alt=""><div class="meta"><h1></h1><div class="muted"></div><div class="actions"></div></div></div>`);
+        h.querySelector('h1').textContent = j.name;
+        h.querySelector('.muted').textContent = `De ${j.owner} · ${tracks.length} canciones`;
+        const a = h.querySelector('.actions');
+        if (tracks.length) {
+          const pl = el(`<button class="btn" type="button">${icon('play')}<span>Reproducir</span></button>`); pl.onclick = () => App.playList(tracks, 0, from);
+          const sh = el(`<button class="btn tonal" type="button">${icon('shuffle')}<span>Aleatorio</span></button>`); sh.onclick = () => { App.setShuffle(true); App.playList(tracks, 0, from); };
+          a.append(pl, sh);
+        }
+        if (key(owner) !== key(Account.user)) {
+          const sv = el(`<button class="btn tonal" type="button">${icon('plus')}<span>Guardar copia</span></button>`);
+          sv.onclick = () => { Library.createPlaylist(j.name, tracks, { source: j.owner }); toast('Guardada en tu biblioteca'); sv.disabled = true; };
+          a.append(sv);
+        }
+        box.appendChild(h);
+        box.appendChild(App.trackList(tracks, { from }));
+      } catch (e) { sp.remove(); box.appendChild(el(`<p class="muted pf-empty">${esc((e && e.message) || 'No se pudo cargar la lista')}</p>`)); }
+    });
+  }
+
+  /* ---------------------------------------------------------------- amigos */
+  let friendsCache = null;
+  async function loadFriends(force) {
+    if (!force && friendsCache && Date.now() - friendsCache.t < 30e3) return friendsCache;
+    const r = await fetch('/api/friends', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('No se pudo cargar');
+    const j = await r.json();
+    [...(j.people || []), ...(j.followers || [])].forEach(x => {
+      const k = key(x.username), c = cache.get(k);
+      cache.set(k, { ...(c || { bio: '', since: 0 }), username: x.username, avatar: x.avatar || null, t: Date.now() });
+    });
+    friendsCache = { ...j, t: Date.now() };
+    return friendsCache;
+  }
+  function personRow(x, extra) {
+    const row = el(`<div class="pf-row">${av(x.username, 'pf-row-av')}<span class="pf-row-txt"><b class="ellipsis"></b><small class="ellipsis muted"></small></span></div>`);
+    row.querySelector('b').textContent = x.username;
+    const sm = row.querySelector('small');
+    if (x.now && x.now.track) { sm.textContent = (x.now.playing ? '♪ ' : '⏸ ') + x.now.track.title + ' · ' + x.now.track.artist; sm.classList.toggle('pf-live', !!x.now.playing); }
+    else sm.textContent = x.mutual === false ? 'Le sigues' : x.mutual ? 'Amigos' : 'Te sigue';
+    row.querySelector('.pf-row-txt').onclick = () => open(x.username);
+    if (extra) row.appendChild(extra);
+    return row;
+  }
+  function openFriends() {
+    App.openView('Amigos', box => {
+      box.appendChild(el('<h1 class="title">Amigos</h1>'));
+      const f = el(`<form class="pf-find"><input type="search" name="q" placeholder="Buscar a alguien por su nombre de usuario" autocomplete="off" maxlength="24" aria-label="Nombre de usuario"><button class="btn" type="submit">Buscar</button></form>`);
+      f.onsubmit = async e => {
+        e.preventDefault();
+        const q = f.q.value.trim();
+        if (!/^[a-z0-9_.-]{3,24}$/i.test(q)) return toast('Escribe el nombre de usuario exacto');
+        try { await get(q, true); open(q); } catch (err) { toast(err.message || 'No existe esa persona'); }
+      };
+      box.appendChild(f);
+      const list = el('<div class="pf-list"></div>');
+      box.appendChild(list);
+      const draw = async force => {
+        let d;
+        try { d = await loadFriends(force); } catch (_) { list.innerHTML = '<p class="muted pf-empty">No se pudieron cargar tus amigos</p>'; return; }
+        list.innerHTML = '';
+        if (!d.people.length && !d.followers.length) {
+          list.appendChild(el('<p class="muted pf-empty">Aún no sigues a nadie. Busca a alguien por su nombre o pulsa la foto de quien esté contigo en una sala.</p>'));
+          return;
+        }
+        if (d.followers.length) {
+          list.appendChild(App.section('Te siguen'));
+          d.followers.forEach(x => {
+            const b = el(`<button class="btn tonal pf-mini" type="button">${icon('plus')}<span>Seguir</span></button>`);
+            b.onclick = async () => { b.disabled = true; if (await follow(x.username, true)) draw(true); else b.disabled = false; };
+            list.appendChild(personRow(x, b));
+          });
+        }
+        if (d.people.length) {
+          list.appendChild(App.section('Sigues a'));
+          d.people.forEach(x => {
+            let extra = null;
+            if (x.room) { extra = el(`<button class="btn tonal pf-mini" type="button">${icon('people')}<span>Su sala</span></button>`); extra.onclick = () => window.Together && Together.join(x.room); }
+            else if (x.now && x.now.track) { extra = el(`<button class="icb" type="button" aria-label="Escuchar lo mismo">${icon('play')}</button>`); extra.onclick = () => listenWith(x.now.track, x.now, x.username); }
+            list.appendChild(personRow(x, extra));
+          });
+        }
+      };
+      draw(true);
+    });
+  }
+
+  // en Inicio: amigos que están escuchando algo ahora
+  async function homeStrip(w) {
+    if (!on() || !w || !w.isConnected) return;
+    let d;
+    try { d = await loadFriends(); } catch (_) { return; }
+    const live = d.people.filter(x => x.now && x.now.track && x.now.playing).slice(0, 12);
+    const old = w.querySelector('.pf-home');
+    if (old) old.remove();
+    if (!live.length) return;
+    const box = el('<div class="pf-home"></div>');
+    box.appendChild(App.section('Tus amigos escuchan', () => openFriends()));
+    const s = el('<div class="pf-strip"></div>');
+    live.forEach(x => {
+      const c = el(`<div class="pf-friend">${av(x.username, 'pf-friend-av')}<button type="button" class="pf-friend-song"><img src="${esc(small(x.now.track.cover) || PLACEHOLDER)}" alt=""><b class="ellipsis"></b><small class="ellipsis muted"></small></button></div>`);
+      c.querySelector('b').textContent = x.now.track.title;
+      c.querySelector('small').textContent = x.username;
+      c.querySelector('.pf-friend-song').onclick = () => listenWith(x.now.track, x.now, x.username);
+      s.appendChild(c);
+    });
+    box.appendChild(s);
+    const after = w.querySelector('h1.title');
+    after ? after.after(box) : w.prepend(box);
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const rh = App.renderHome;
+    App.renderHome = function (...a) {
+      const r = rh.apply(this, a);
+      setTimeout(() => homeStrip(document.querySelector('#tab-home .wrap')), 0);
+      return r;
+    };
+    // se refresca cada minuto mientras Inicio está a la vista
+    setInterval(() => {
+      const tab = document.querySelector('#tab-home');
+      if (!document.hidden && tab && !tab.hidden && !document.body.classList.contains('in-view')) { friendsCache = null; homeStrip(tab.querySelector('.wrap')); }
+    }, 60e3);
+  }, { once: true });
+
+  // tu canción del perfil (desde el menú de una canción)
+  async function setSong(t) {
+    try {
+      const r = await fetch('/api/profile', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ song: t ? clean(t) : null }) });
+      if (!r.ok) throw 0;
+      toast(t ? 'Ahora es la canción de tu perfil' : 'Canción quitada de tu perfil');
+    } catch (_) { toast('No se pudo guardar'); }
   }
 
   /* ---------------------------------------------------------------- editar el tuyo */
@@ -196,6 +454,10 @@ const Profile = (() => {
             </div>
           </div>
           <label><span>Descripción</span><textarea name="bio" maxlength="${BIO_MAX}" rows="3" placeholder="Cuéntales qué música te gusta…"></textarea><small class="pf-count"></small></label>
+          <label><span>Quién ve lo que estás escuchando</span><select name="share">
+            <option value="friends">Solo amigos (os seguís los dos)</option><option value="all">Cualquiera con cuenta</option><option value="none">Nadie</option></select></label>
+          <label class="pf-check"><input type="checkbox" name="top"><span>Mostrar mis artistas más escuchados</span></label>
+          ${p.song ? `<label class="pf-check"><input type="checkbox" name="nosong"><span>Quitar «${esc(p.song.title)}» como canción del perfil</span></label>` : ''}
           <p class="acct-err" role="alert" hidden></p>
           <div class="acct-actions"><button type="button" class="btn tonal" data-cancel>Cancelar</button><button class="btn" type="submit">Guardar</button></div>
         </form>`);
@@ -204,6 +466,8 @@ const Profile = (() => {
         mid.removeAttribute('role'); mid.removeAttribute('tabindex'); mid.removeAttribute('data-profile');
         const showErr = m => { errBox.textContent = m; errBox.hidden = !m; };
         ta.value = p.bio || '';
+        const pr = p.prefs || { share: 'friends', top: true };
+        f.share.value = pr.share; f.top.checked = pr.top !== false;
         const upd = () => { count.textContent = `${ta.value.length}/${BIO_MAX}`; };
         ta.oninput = upd; upd();
         let picked = null, removed = false, preview = '';
@@ -245,11 +509,16 @@ const Profile = (() => {
               if (!r.ok) throw new Error('No se pudo quitar la foto');
               c.avatar = null;
             }
-            if (ta.value.trim() !== (p.bio || '')) {
-              const r = await fetch('/api/profile', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bio: ta.value }) });
+            const body = {};
+            if (ta.value.trim() !== (p.bio || '')) body.bio = ta.value;
+            if (f.share.value !== pr.share) body.share = f.share.value;
+            if (f.top.checked !== (pr.top !== false)) body.top = f.top.checked;
+            if (f.nosong && f.nosong.checked) body.song = null;
+            if (Object.keys(body).length) {
+              const r = await fetch('/api/profile', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
               let j = null; try { j = await r.json(); } catch (_) {}
-              if (!r.ok) throw new Error((j && j.error) || 'No se pudo guardar la descripción');
-              c.bio = j.bio;
+              if (!r.ok) throw new Error((j && j.error) || 'No se pudo guardar');
+              if ('bio' in j) c.bio = j.bio;
             }
             c.t = Date.now();
             cache.set(key(me), c);
@@ -265,6 +534,6 @@ const Profile = (() => {
     });
   }
 
-  return { av, open, get, paint };
+  return { av, open, get, paint, openFriends, setSong, on };
 })();
 window.Profile = Profile;

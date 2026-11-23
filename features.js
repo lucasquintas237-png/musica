@@ -572,6 +572,13 @@ const Features = (() => {
             { icon: 'queue', label: 'A la cola', tonal: true, fn: () => App.addToQueue(pl.tracks) },
             { icon: 'more', label: 'Más', tonal: true, fn: () => App.sheet({ title: pl.name, items: [
               { icon: 'lyrics', label: 'Renombrar', fn: () => App.prompt('Nuevo nombre', pl.name, n => { Library.renamePlaylist(pid, n); render(); }) },
+              window.Profile && Profile.on() && { icon: 'person', label: pl.pub ? 'Dejar de mostrar en tu perfil' : 'Mostrar en tu perfil', fn: () => {
+                const all = Library.playlists(), cur = all.find(p => p.id === pid);
+                if (!cur) return;
+                cur.pub = !cur.pub; if (!cur.pub) delete cur.pub;
+                Library.savePlaylists(all);
+                toast(cur.pub ? 'Se verá en tu perfil' : 'Ya no se ve en tu perfil');
+              } },
               { icon: 'trash', label: 'Eliminar lista', fn: () => { Library.deletePlaylist(pid); toast('Lista eliminada'); history.back(); } }
             ] }) }
           ]
@@ -739,6 +746,8 @@ const Features = (() => {
         <div class="set" data-a="import">${icon('upload')}<div class="lbl">Importar datos<small>Desde una copia exportada</small></div></div>
         <div class="set" data-a="clear-hist">${icon('trash')}<div class="lbl">Borrar historial de escucha</div></div>
       </div>
+      ${window.Discord && window.Account && Account.user ? `<h2 class="sec">Discord</h2>
+      <div class="group"><div class="set" data-a="discord">${icon('discord')}<div class="lbl">Mostrar en Discord lo que escuchas<small>Tu estado pondrá «Escuchando» con la canción, el artista y la portada</small></div></div></div>` : ''}
       ${window.Remote && window.Account && Account.user ? `<h2 class="sec">Para desarrolladores</h2>
       <div class="group"><div class="set" data-a="api">${icon('key')}<div class="lbl">API<small>Tokens personales para usar tu música desde otros programas</small></div></div></div>` : ''}
       <h2 class="sec">Atajos de teclado</h2>
@@ -775,7 +784,7 @@ const Features = (() => {
     });
     $$('.set[data-a]', b).forEach(x => x.onclick = () => ({
       timer: () => timerMenu(), 'import-link': () => Sources.importPrompt(), artists: () => window.Welcome && Welcome.open(), stats: () => openStats(),
-      export: () => exportData(), import: () => importData(), api: () => Remote.open(),
+      export: () => exportData(), import: () => importData(), api: () => Remote.open(), discord: () => window.Discord && Discord.open(),
       lang: () => App.sheet({ title: 'Idioma', items: Object.entries(I18n.langs).map(([k, v]) => ({ icon: 'flag-' + k, label: v + (k === I18n.lang ? '  ✓' : ''), fn: () => I18n.set(k) })) }),
       'clear-hist': () => App.sheet({ title: '¿Borrar el historial?', sub: 'Las estadísticas también se reinician', items: [{ icon: 'trash', label: 'Borrar', fn: () => { store.set('history', []); store.set('stats', { plays: {}, days: {}, total: 0 }); toast('Historial borrado'); } }] })
     }[x.dataset.a])());
