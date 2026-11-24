@@ -878,6 +878,51 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
 .pf-friend-song img{width:136px;height:136px;border-radius:16px;object-fit:cover;margin-bottom:6px}
 .pf-friend-song b{font-size:14px}
 .pf-friend-song small{font-size:12.5px}
+/* Acerca del artista (artistinfo.js) */
+.ai-host{padding:8px var(--gutter) 4px;container-type:inline-size}
+.ai{border-radius:28px;overflow:hidden;background:var(--surface-c-high);color:var(--fg)}
+.ai-img{position:relative;aspect-ratio:12/5;background:var(--surface-c-highest)}
+.ai-img img{width:100%;height:100%;object-fit:cover;display:block}
+.ai-img::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.55),transparent 55%)}
+.ai-eyebrow{position:absolute;left:20px;bottom:14px;z-index:1;color:#fff;font-weight:700;font-size:18px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
+.ai-body{display:flex;flex-direction:column;gap:16px;padding:20px}
+.ai-side{display:flex;gap:28px;flex-wrap:wrap}
+.ai-side:empty{display:none}
+.ai-stat{display:flex;flex-direction:column}
+.ai-stat b{font-size:30px;font-weight:800;line-height:1.05;letter-spacing:-.5px}
+.ai-stat span{font-size:13px;color:var(--fg2)}
+.ai-name{margin:0 0 6px;font-size:20px}
+.ai-bio{margin:0;font-size:15px;line-height:1.55;white-space:pre-line}
+.ai-bio.clamp{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.ai-more{margin-top:8px}
+.ai-facts{display:flex;flex-direction:column;gap:6px;margin-top:14px;font-size:14px}
+.ai-facts:empty{display:none}
+.ai-fact{display:flex;gap:10px;flex-wrap:wrap}
+.ai-fact .muted{min-width:150px}
+.ai-genres{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.ai-genre{padding:4px 12px;border-radius:99px;background:var(--secondary-container);color:var(--on-secondary-container);font-size:13px;font-weight:600}
+.ai-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.ai-links:empty{display:none}
+.ai-links .btn{height:40px;padding:0 18px;text-decoration:none}
+.ai-src{display:block;margin-top:10px;font-size:11.5px}
+.ai-none{text-align:center;padding:30px 16px}
+@container (min-width:620px){ .ai-body{flex-direction:row;gap:32px;padding:26px} .ai-side{flex-direction:column;gap:22px;width:170px;flex:none} .ai-main{flex:1;min-width:0} .ai-img{aspect-ratio:16/5} }
+/* en el reproductor (encima de la portada) */
+.ai-panel{padding:4px 2px 24px;container-type:inline-size}
+.ai-panel .ai{background:color-mix(in srgb,var(--surface-c-high) 85%,transparent)}
+/* panel "Ahora suena" del ordenador */
+.now-about{margin-top:14px}
+.now-about:empty{display:none}
+.ai-compact{border-radius:20px}
+.ai-compact .ai-img{aspect-ratio:16/9}
+.ai-compact .ai-body{padding:14px;gap:10px}
+.ai-compact .ai-stat b{font-size:20px}
+.ai-compact .ai-name{font-size:16px}
+.ai-compact .ai-bio{font-size:13.5px}
+.ai-compact .ai-bio.clamp{-webkit-line-clamp:4}
+.ai-compact .ai-facts,.ai-compact .ai-src{display:none}
+.ai-compact .ai-links{margin-top:10px}
+.ai-compact .ai-links .btn{height:36px;padding:0 14px;font-size:13.5px}
 .dc{padding:0 8px 8px}
 .dc-steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:14px;font-size:14.5px;line-height:1.45}
 .dc-steps a{color:var(--primary)}
@@ -1188,6 +1233,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
     <div class="now-vol"><button class="vol-btn" type="button" aria-label="Silenciar"><svg class="ic vol-ic" viewBox="0 0 24 24" data-l="3" aria-hidden="true"><path class="spk" d="M3 9v6h4l5 5V4L7 9H3z"/><path class="w w1" d="M15 9.4a3.4 3.4 0 010 5.2"/><path class="w w2" d="M17.3 7.2a6.6 6.6 0 010 9.6"/><path class="w w3" d="M19.6 5a9.8 9.8 0 010 14"/><path class="x" d="M15.6 9.6l4.8 4.8m0-4.8l-4.8 4.8"/></svg></button><input type="range" id="n-vol" min="0" max="100" value="80" aria-label="Volumen"></div>
   </div>
   <div class="now-next"><h3>A continuación</h3><div id="n-up"></div></div>
+  <div id="n-about" class="now-about"></div>
 </aside>
 
 <!-- mini reproductor -->
@@ -1242,6 +1288,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
     <div class="p-tools">
       <button class="icb" data-act="lyrics" aria-label="Letra"><svg class="ic"><use href="#i-lyrics"/></svg></button>
       <button class="icb" data-act="queue" aria-label="Cola"><svg class="ic"><use href="#i-queue"/></svg></button>
+      <button class="icb" data-act="artist" aria-label="Acerca del artista"><svg class="ic"><use href="#i-person"/></svg></button>
       <button class="icb" data-act="radio" aria-label="Radio"><svg class="ic"><use href="#i-radio"/></svg></button>
       <button class="icb" data-act="timer" aria-label="Temporizador"><svg class="ic"><use href="#i-timer"/></svg></button>
     </div>
@@ -1260,6 +1307,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="account.js"></script>
 <script src="profile.js"></script>
 <script src="discord.js"></script>
+<script src="artistinfo.js"></script>
 <script src="features.js"></script>
 <script src="sources.js"></script>
 <script src="now.js"></script>

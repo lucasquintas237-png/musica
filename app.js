@@ -290,7 +290,16 @@ const YTM = (() => {
       title: txt(walk(c.header, 'title')[0]),
       items: walk(c.contents, 'musicTwoRowItemRenderer').map(parseTwoRow)
     })).filter(c => c.items.length);
-    return { name: h.title, cover: h.cover, desc: h.desc, sub: [h.sub, h.second].filter(Boolean).join(' · '), songs, carousels };
+    // para "Acerca del artista": oyentes al mes, suscriptores, su canal y la foto grande
+    const sb = walk(j, 'subscribeButtonRenderer')[0] || {};
+    const hd = j.header && Object.values(j.header)[0] || {};
+    const thumbs = (walk(hd.thumbnail, 'thumbnails')[0] || []).slice().sort((a, b) => (b.width || 0) - (a.width || 0));
+    const num = s => String(s || '').replace(/\s*(usuarios|oyentes|suscriptores|monthly|subscribers|listeners).*$/i, '').trim();
+    return {
+      name: h.title, cover: h.cover, desc: h.desc, sub: [h.sub, h.second].filter(Boolean).join(' · '), songs, carousels,
+      listeners: num(txt(hd.monthlyListenerCount)), subs: num(txt(sb.subscriberCountText)),
+      channelId: /^UC[\w-]{22}$/.test(sb.channelId || '') ? sb.channelId : '', banner: (thumbs[0] && thumbs[0].url) || ''
+    };
   }
 
   async function playlist(id) {
@@ -1247,7 +1256,7 @@ const App = {
         close: () => this.closePlayer(), shuffle: () => this.setShuffle(!s.shuffle), repeat: () => this.cycleRepeat(),
         fav: () => { if (this.current) { Library.toggleFav(this.current); this.updateFav(); } },
         more: () => this.current && this.trackMenu(this.current),
-        lyrics: () => Features.togglePanel('lyrics'), queue: () => Features.togglePanel('queue'),
+        lyrics: () => Features.togglePanel('lyrics'), queue: () => Features.togglePanel('queue'), artist: () => Features.togglePanel('artist'),
         radio: () => this.current && Features.startRadio(this.current), timer: () => Features.timerMenu()
       }[a] || (() => {}))();
     });

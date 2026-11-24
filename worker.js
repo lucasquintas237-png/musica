@@ -16,6 +16,7 @@ import { handleAccounts, requireSession } from './server/accounts.js';
 import { handleRooms } from './server/rooms.js';
 import { handleApi } from './server/api.js';
 import { handleProfiles } from './server/profiles.js';
+import { handleArtist } from './server/artist.js';
 
 const CSP = [
   "default-src 'self'",
@@ -69,6 +70,8 @@ async function api(request, env, p, ctx) {
     // todo lo demás (búsqueda, letras, Spotify, portadas) exige haber iniciado sesión
     const denied = await requireSession(request, env);
     if (denied) return denied;
+    // ficha "Acerca del artista" (Wikidata y Wikipedia)
+    if (p === 'artistinfo' && request.method === 'GET') return await handleArtist(request);
   } catch (e) {
     console.error('api', p, e);
     return fail(e && e.status || 500, e && e.status ? e.message : 'Error del servidor');

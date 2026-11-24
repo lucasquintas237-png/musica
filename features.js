@@ -241,11 +241,12 @@ const Features = (() => {
     const panel = $('#player .p-panel'), coverEl = $('#player .p-cover');
     if (!$('#player').classList.contains('open')) App.openPlayer();
     const showing = !panel.hidden && panel.dataset.kind === kind;
-    $$('#player .p-tools [data-act=lyrics], #player .p-tools [data-act=queue]').forEach(b => b.classList.remove('on'));
+    $$('#player .p-tools [data-act=lyrics], #player .p-tools [data-act=queue], #player .p-tools [data-act=artist]').forEach(b => b.classList.remove('on'));
     if (showing) { panel.hidden = true; coverEl.style.visibility = ''; panel.dataset.kind = ''; return; }
     panel.hidden = false; coverEl.style.visibility = 'hidden'; panel.dataset.kind = kind;
-    $(`#player .p-tools [data-act=${kind}]`).classList.add('on');
+    const tb = $(`#player .p-tools [data-act=${kind}]`); tb && tb.classList.add('on');
     if (kind === 'lyrics') { lyr.id = null; loadLyrics(panel); }
+    else if (kind === 'artist' && window.ArtistInfo) ArtistInfo.panel(panel);
     else renderQueue(panel);
   }
 
@@ -483,13 +484,21 @@ const Features = (() => {
         const mine = Object.values(Library.stats().plays || {}).filter(e => e.t && k && Reco.artistKey(e.t.artist) === k).sort((x, y) => y.n - x.n || y.secs - x.secs).slice(0, 5).map(e => e.t);
         if (mine.length) { box.appendChild(App.section('Lo que más escuchas de ' + me.name)); box.appendChild(App.trackList(mine, { from: me.name })); }
         if (a.songs.length) { box.appendChild(App.section('Canciones populares')); box.appendChild(App.trackList(a.songs, { from: a.name, showAlbum: true })); }
+        // Acerca del artista (foto, oyentes, biografía, datos)
+        let aboutDone = false;
+        if (window.ArtistInfo) {
+          const about = el('<div class="ai-host"></div>');
+          box.appendChild(about);
+          ArtistInfo.mount(about, id, me.name, {}, a);
+          aboutDone = true;
+        }
         // discografía de lo más nuevo a lo más antiguo; artistas parecidos al final
         a.carousels.slice().sort((x, y) => (isRelease(y) ? 1 : 0) - (isRelease(x) ? 1 : 0)).forEach(c => {
           const items = isRelease(c) ? byYear(c.items).map(i => ({ ...i, sub: [i.year, i.sub && i.sub.replace(/^.*•\s*/, '')].filter(Boolean)[0] || i.sub })) : c.items;
           box.appendChild(App.section(c.title));
           box.appendChild(App.shelf(items, it => App.openItem(it), c.items.every(i => i.kind === 'artist')));
         });
-        if (a.desc) {
+        if (a.desc && !aboutDone) {
           const long = a.desc.length > 360;
           const bio = el(`<div class="bio"><h2 class="sec"><span>Biografía</span></h2><p class="muted">${esc(long ? a.desc.slice(0, 360) + '…' : a.desc)}</p>${long ? '<button class="chip">Leer más</button>' : ''}</div>`);
           if (long) bio.querySelector('.chip').onclick = e => { bio.querySelector('p').textContent = a.desc; e.currentTarget.remove(); };
@@ -821,7 +830,7 @@ const Features = (() => {
   /* ================================================================ eventos */
   App.on('track', () => {
     const panel = $('#player .p-panel');
-    if (!panel.hidden) panel.dataset.kind === 'lyrics' ? loadLyrics(panel) : renderQueue(panel);
+    if (!panel.hidden && panel.dataset.kind !== 'artist') panel.dataset.kind === 'lyrics' ? loadLyrics(panel) : renderQueue(panel);
   });
   App.on('queue', () => {
     const panel = $('#player .p-panel');
