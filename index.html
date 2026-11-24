@@ -935,22 +935,83 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
 .rc-line{display:flex;align-items:flex-end;gap:6px;align-self:flex-start;max-width:88%}
 .rc-line .rc-msg{max-width:none}
 /* pantalla de bienvenida (inicio de sesión obligatorio en la web publicada) */
-#auth-gate{position:fixed;inset:0;z-index:40;display:grid;place-items:center;padding:24px 16px calc(24px + var(--safe-b));overflow-y:auto;
-  background:radial-gradient(120% 80% at 50% 0%,var(--primary-container),var(--surface) 70%);animation:fade .3s}
+#auth-gate{position:fixed;inset:0;z-index:40;overflow-y:auto;overflow-x:hidden;background:var(--surface);animation:fade .35s}
 body.gated #app,body.gated #view,body.gated #now,body.gated #mini,body.gated #tabwrap,body.gated #player{visibility:hidden}
-.gate-card{width:min(420px,100%);padding:28px 24px 20px;border-radius:32px;background:var(--surface-c-low);box-shadow:var(--elev);animation:sheetIn .5s var(--ease-emph)}
-.gate-logo{width:72px;height:72px;margin:0 auto 16px;display:grid;place-items:center;background:var(--primary);color:var(--on-primary);clip-path:var(--shape-cookie9);
-  animation:spin 24s linear infinite}
-.gate-logo .ic{width:34px;height:34px;animation:spin 24s linear infinite reverse}
-.gate-card h1{margin:0 0 6px;text-align:center;font-size:28px;line-height:1.15;font-weight:700;letter-spacing:-.015em;font-variation-settings:"ROND" 100}
+/* fondo: aurora que se mueve despacio y formas de la app flotando */
+.gate-bg{position:fixed;inset:0;overflow:hidden;pointer-events:none}
+.gate-bg i{position:absolute;border-radius:50%;filter:blur(70px);opacity:.55;animation:gbMove 22s ease-in-out infinite alternate}
+.gb1{width:60vmax;height:60vmax;left:-15vmax;top:-25vmax;background:var(--primary)}
+.gb2{width:50vmax;height:50vmax;right:-18vmax;top:10vh;background:var(--tertiary,#c58af9);animation-duration:28s!important;animation-direction:alternate-reverse!important}
+.gb3{width:45vmax;height:45vmax;left:20vw;bottom:-30vmax;background:var(--secondary,#7fb2ff);animation-duration:34s!important}
+@keyframes gbMove{to{transform:translate(8vmax,6vmax) scale(1.15)}}
+.gs{position:absolute;display:block;background:var(--on-surface,#fff);opacity:.06;animation:gsFloat 30s linear infinite}
+.gs1{width:140px;height:140px;left:6%;top:62%;clip-path:var(--shape-cookie9)}
+.gs2{width:90px;height:90px;right:9%;top:14%;clip-path:var(--shape-pentagon);animation-duration:38s}
+.gs3{width:200px;height:200px;right:-40px;bottom:6%;clip-path:var(--shape-flower);animation-duration:46s}
+.gs4{width:70px;height:70px;left:40%;top:6%;clip-path:var(--shape-cookie4);animation-duration:26s}
+@keyframes gsFloat{to{transform:rotate(360deg) translateY(-30px)}}
+@media (prefers-reduced-motion:reduce){ .gate-bg i,.gs,.gate-logo .eq i{animation:none!important} }
+.gate-wrap{position:relative;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:32px 16px calc(28px + var(--safe-b))}
+/* presentación */
+.gate-hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;max-width:440px}
+.gate-logo{width:76px;height:76px;display:grid;place-items:center;background:var(--primary);color:var(--on-primary);clip-path:var(--shape-cookie9);animation:spin 30s linear infinite;box-shadow:0 10px 40px color-mix(in srgb,var(--primary) 50%,transparent)}
+.gate-logo .eq{display:flex;align-items:flex-end;gap:3px;height:28px;animation:spin 30s linear infinite reverse}
+.gate-logo .eq i{width:5px;border-radius:3px;background:currentColor;animation:eqBar 1s ease-in-out infinite alternate}
+.gate-logo .eq i:nth-child(1){height:40%;animation-delay:-.2s}
+.gate-logo .eq i:nth-child(2){height:90%;animation-delay:-.6s}
+.gate-logo .eq i:nth-child(3){height:60%;animation-delay:-.1s}
+.gate-logo .eq i:nth-child(4){height:100%;animation-delay:-.8s}
+.gate-logo .eq i:nth-child(5){height:50%;animation-delay:-.4s}
+@keyframes eqBar{from{transform:scaleY(.3)}to{transform:scaleY(1)}}
+.gate-logo .eq i{transform-origin:bottom}
+.gate-brand{margin:10px 0 0;font-size:34px;font-weight:800;letter-spacing:-.03em;font-variation-settings:"ROND" 100}
+.gate-claim{margin:0;color:var(--fg2);font-size:15px}
+.gate-feats{display:none;list-style:none;margin:22px 0 0;padding:0;gap:14px;flex-direction:column;text-align:left}
+.gate-feats li{display:flex;align-items:center;gap:14px;font-size:15.5px}
+.gate-feats .ic{width:22px;height:22px;flex:none;padding:10px;box-sizing:content-box;border-radius:14px;background:color-mix(in srgb,var(--primary) 18%,transparent);color:var(--primary)}
+/* tarjeta */
+.gate-card{width:min(430px,100%);padding:28px 24px 22px;border-radius:32px;background:color-mix(in srgb,var(--surface-c-low) 88%,transparent);
+  backdrop-filter:blur(24px) saturate(1.3);-webkit-backdrop-filter:blur(24px) saturate(1.3);box-shadow:0 20px 60px rgba(0,0,0,.35),0 0 0 1px color-mix(in srgb,var(--fg) 8%,transparent) inset;animation:sheetIn .5s var(--ease-emph)}
+.gate-card.swap .acct-form,.gate-card.swap h1,.gate-card.swap .gate-sub{animation:gateSwap .35s var(--ease-emph)}
+@keyframes gateSwap{from{opacity:0;transform:translateY(8px)}}
+.gate-card h1{margin:0 0 6px;text-align:center;font-size:27px;line-height:1.15;font-weight:700;letter-spacing:-.015em;font-variation-settings:"ROND" 100}
 .gate-sub{margin:0 0 20px;text-align:center;color:var(--fg2);font-size:14.5px}
-.gate-tabs{display:flex;gap:3px;margin:0 8px 14px}
-.gate-tabs button{flex:1;height:44px;font-weight:600;font-size:14.5px;background:var(--surface-c-highest);color:var(--fg);border-radius:8px;
-  transition:border-radius .35s var(--spring),background .2s,color .2s}
-.gate-tabs button:first-child{border-radius:22px 8px 8px 22px}
-.gate-tabs button:last-child{border-radius:8px 22px 22px 8px}
-.gate-tabs button.on{background:var(--primary);color:var(--on-primary);border-radius:22px}
+.gate-tabs{position:relative;display:flex;margin:0 4px 18px;padding:4px;border-radius:26px;background:var(--surface-c-highest)}
+.gate-ind{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:22px;background:var(--primary);transition:transform .45s var(--spring)}
+.gate-tabs.reg .gate-ind{transform:translateX(100%)}
+.gate-tabs button{position:relative;flex:1;height:42px;font-weight:600;font-size:14.5px;color:var(--fg);border-radius:22px;transition:color .25s}
+.gate-tabs button.on{color:var(--on-primary)}
 .gate-card .acct-actions .btn{flex:1;justify-content:center}
+@media (min-width:900px){
+  .gate-wrap{flex-direction:row;gap:72px;padding:40px}
+  .gate-hero{align-items:flex-start;text-align:left;max-width:420px}
+  .gate-brand{font-size:52px}
+  .gate-claim{font-size:18px}
+  .gate-feats{display:flex}
+}
+@media (max-height:640px) and (max-width:899px){ .gate-claim{display:none} .gate-logo{width:60px;height:60px} .gate-brand{font-size:28px;margin-top:6px} .gate-wrap{gap:14px;padding-top:20px} }
+/* formulario de cuenta (también en la hoja) */
+.acct-form .af-field{gap:6px}
+.af-input{position:relative;display:flex;align-items:center}
+.af-input > .ic{position:absolute;left:16px;width:20px;height:20px;color:var(--fg2);pointer-events:none;transition:color .2s}
+.acct-form .af-input input{padding-left:48px}
+.acct-form .af-input input:focus{padding-left:47px}
+.af-input:focus-within > .ic{color:var(--primary)}
+.acct-form .af-input input[name=password]{padding-right:52px}
+.af-eye{position:absolute;right:6px;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--fg2)}
+.af-eye:hover{background:var(--surface-c-high)}
+.af-eye .ic{width:20px;height:20px}
+.af-hint,.af-caps,.af-strength{font-size:12.5px;font-weight:500;color:var(--fg2)}
+.af-caps{color:#ffb4ab}
+.af-meter{display:flex;gap:4px;margin-top:2px}
+.af-meter i{flex:1;height:4px;border-radius:2px;background:var(--surface-c-highest);transition:background .25s}
+.af-meter i.on.s1{background:#ff5449}.af-meter i.on.s2{background:#ffb02e}.af-meter i.on.s3{background:#7cc96b}.af-meter i.on.s4{background:#2fbf71}
+.af-strength.s1{color:#ff8a80}.af-strength.s2{color:#ffc06b}.af-strength.s3,.af-strength.s4{color:#7cd992}
+.af-go{position:relative}
+.af-spin{display:none;width:18px;height:18px;border-radius:50%;border:2.5px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+.af-go.busy .af-spin{display:inline-block}
+.acct-form.shake{animation:afShake .4s}
+@keyframes afShake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
 
 /* ================================================================== efectos (fx.js) */
 /* colores dinámicos que se funden al cambiar de canción o de tema */
@@ -1176,6 +1237,8 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></symbol>
   <symbol id="i-playnext" viewBox="0 0 24 24"><path d="M3 10h11v2H3zm0-4h11v2H3zm0 8h7v2H3zm13-1v8l6-4z"/></symbol>
   <symbol id="i-album" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 14.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9zm0-5.5a1 1 0 100 2 1 1 0 000-2z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zM12 17a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M12 7a5 5 0 014.9 6l3 3A11.8 11.8 0 0023 12c-1.7-4.4-6-7.5-11-7.5-1.4 0-2.7.2-4 .7l2.2 2.2c.6-.2 1.2-.4 1.8-.4zM2 4.3l2.3 2.3.5.4A11.8 11.8 0 001 12c1.7 4.4 6 7.5 11 7.5 1.5 0 3-.3 4.4-.8l.4.4L19.7 22 21 20.7 3.3 3 2 4.3zm5.5 5.5l1.6 1.6A3 3 0 0012 15c.2 0 .4 0 .6-.1l1.6 1.6c-.7.3-1.4.5-2.2.5a5 5 0 01-4.5-7.2zm4.3-.8l3.2 3.2V12a3 3 0 00-3-3h-.2z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
   <symbol id="i-discord" viewBox="0 0 24 24"><path d="M19.6 5.3A16.5 16.5 0 0015.5 4l-.5 1a15 15 0 00-6 0l-.5-1a16.4 16.4 0 00-4.1 1.3C1.8 9.2 1.1 13 1.4 16.7A16.6 16.6 0 006.4 19l1.1-1.7c-.6-.2-1.2-.5-1.7-.9l.4-.3a11.8 11.8 0 0011.6 0l.4.3c-.5.4-1.1.7-1.7.9l1.1 1.7a16.5 16.5 0 005-2.3c.4-4.3-.7-8-3-11.4zM8.7 14.5c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></symbol>

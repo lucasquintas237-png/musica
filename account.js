@@ -211,25 +211,69 @@ const Account = (() => {
   // formulario de entrar / crear cuenta (lo usan la hoja y la pantalla de bienvenida)
   function buildForm(mode, onSwitch) {
     const reg = mode === 'register';
-    const f = el(`<form class="acct-form" autocomplete="on">
-          <label><span>Nombre de usuario</span><input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="24" required></label>
-          <label><span>Contraseña</span><input type="password" name="password" autocomplete="${reg ? 'new-password' : 'current-password'}" minlength="${reg ? 8 : 1}" maxlength="200" required></label>
+    const label = reg ? 'Crear cuenta' : 'Entrar';
+    const f = el(`<form class="acct-form" autocomplete="on" novalidate>
+          <label class="af-field"><span>Nombre de usuario</span>
+            <span class="af-input">${icon('person')}<input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="24" required placeholder="${reg ? 'Elige un nombre' : 'Tu nombre de usuario'}"></span>
+            ${reg ? '<small class="af-hint">De 3 a 24: letras, números, punto, guion o guion bajo</small>' : ''}</label>
+          <label class="af-field"><span>Contraseña</span>
+            <span class="af-input">${icon('key')}<input type="password" name="password" autocomplete="${reg ? 'new-password' : 'current-password'}" minlength="${reg ? 8 : 1}" maxlength="200" required placeholder="${reg ? 'Al menos 8 caracteres' : 'Tu contraseña'}">
+              <button type="button" class="af-eye" aria-label="Mostrar contraseña" aria-pressed="false">${icon('eye')}</button></span>
+            <small class="af-caps" hidden>Bloq Mayús está activado</small>
+            ${reg ? '<span class="af-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span><small class="af-strength"></small>' : ''}</label>
           <p class="acct-err" role="alert" hidden></p>
           <div class="acct-actions">
             <button type="button" class="btn tonal" data-switch>${reg ? 'Ya tengo cuenta' : 'Crear una cuenta'}</button>
-            <button class="btn" type="submit">${reg ? 'Crear cuenta' : 'Entrar'}</button>
+            <button class="btn af-go" type="submit"><span class="af-spin" aria-hidden="true"></span><span class="af-lbl">${label}</span></button>
           </div>
-          ${reg ? '<p class="acct-note">De 3 a 24 caracteres: letras, números, punto, guion o guion bajo. La contraseña, de al menos 8 (mejor una frase larga). No hay forma de recuperarla, así que apúntala.</p>' : ''}
+          ${reg ? '<p class="acct-note">No hay correo ni forma de recuperar la contraseña: apúntala en un sitio seguro. Mejor una frase larga que una palabra rara.</p>' : ''}
         </form>`);
-    const errBox = f.querySelector('.acct-err'), btn = f.querySelector('[type=submit]');
+    const errBox = f.querySelector('.acct-err'), btn = f.querySelector('[type=submit]'), lbl = btn.querySelector('.af-lbl');
+    const pw = f.password, eye = f.querySelector('.af-eye'), caps = f.querySelector('.af-caps');
     f.querySelector('[data-switch]').onclick = () => onSwitch(reg ? 'login' : 'register');
+    // ver / ocultar la contraseña
+    eye.onclick = () => {
+      const show = pw.type === 'password';
+      pw.type = show ? 'text' : 'password';
+      eye.setAttribute('aria-pressed', show); eye.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+      eye.innerHTML = icon(show ? 'eye-off' : 'eye');
+      pw.focus();
+    };
+    // aviso de Bloq Mayús
+    const capsCheck = e => { if (e.getModifierState) caps.hidden = !e.getModifierState('CapsLock'); };
+    pw.addEventListener('keydown', capsCheck); pw.addEventListener('keyup', capsCheck); pw.addEventListener('blur', () => { caps.hidden = true; });
+    // qué tal es la contraseña (al crear cuenta)
+    if (reg) {
+      const bars = f.querySelectorAll('.af-meter i'), txt = f.querySelector('.af-strength');
+      const NAMES = ['', 'Muy débil', 'Débil', 'Buena', 'Muy buena'];
+      pw.addEventListener('input', () => {
+        const v = pw.value;
+        let s = 0;
+        if (v.length >= 8) s++;
+        if (v.length >= 12) s++;
+        if (/[a-z]/i.test(v) && /\d/.test(v)) s++;
+        if (/[^a-z0-9]/i.test(v) || v.length >= 16) s++;
+        if (v && v.length < 8) s = 1;
+        if (/^(.)\1+$/.test(v) || /^(1234|qwer|pass|contra)/i.test(v)) s = 1;
+        bars.forEach((b, i) => { b.className = i < s ? 'on s' + s : ''; });
+        txt.textContent = v ? NAMES[s] : '';
+        txt.className = 'af-strength s' + s;
+      });
+    }
+    // el nombre: solo los caracteres que valen
+    f.username.addEventListener('input', () => { const c = f.username.value.replace(/[^a-z0-9_.-]/gi, ''); if (c !== f.username.value) f.username.value = c; });
     f.onsubmit = async e => {
       e.preventDefault();
-      errBox.hidden = true; btn.disabled = true; btn.textContent = reg ? 'Creando…' : 'Entrando…';
-      try { await submit(mode, f.username.value.trim(), f.password.value); }
+      const u = f.username.value.trim();
+      const err = m => { errBox.textContent = m; errBox.hidden = false; f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake'); };
+      if (u.length < 3) return err('El nombre de usuario tiene que tener al menos 3 caracteres'), f.username.focus();
+      if (!pw.value) return err('Escribe la contraseña'), pw.focus();
+      if (reg && pw.value.length < 8) return err('La contraseña tiene que tener al menos 8 caracteres'), pw.focus();
+      errBox.hidden = true; btn.disabled = true; btn.classList.add('busy'); lbl.textContent = reg ? 'Creando…' : 'Entrando…';
+      try { await submit(mode, u, pw.value); }
       catch (x) {
-        errBox.textContent = x.message; errBox.hidden = false;
-        btn.disabled = false; btn.textContent = reg ? 'Crear cuenta' : 'Entrar';
+        err(x.message);
+        btn.disabled = false; btn.classList.remove('busy'); lbl.textContent = label;
       }
     };
     return f;
@@ -258,21 +302,46 @@ const Account = (() => {
       document.body.classList.add('gated');
       try { Player.pause(); } catch (_) {}
     }
-    gateEl.innerHTML = `<div class="gate-card">
-      <div class="gate-logo" aria-hidden="true">${icon('note')}</div>
-      <h1 id="gate-title">${reg ? 'Crea tu cuenta' : 'Te damos la bienvenida'}</h1>
-      <p class="gate-sub">${reg ? 'Solo un nombre de usuario y una contraseña, sin correo.' : 'Inicia sesión para escuchar tu música, con tu propio inicio, favoritas e historial.'}</p>
-      <div class="gate-tabs" role="tablist">
-        <button role="tab" aria-selected="${!reg}" class="${reg ? '' : 'on'}" data-m="login">Entrar</button>
-        <button role="tab" aria-selected="${reg}" class="${reg ? 'on' : ''}" data-m="register">Crear cuenta</button>
-      </div>
-    </div>`;
+    // fondo y presentación: se crean una vez; al cambiar de pestaña solo cambia la tarjeta
+    if (!gateEl.querySelector('.gate-wrap')) {
+      gateEl.innerHTML = `<div class="gate-bg" aria-hidden="true"><i class="gb1"></i><i class="gb2"></i><i class="gb3"></i>
+          <span class="gs gs1"></span><span class="gs gs2"></span><span class="gs gs3"></span><span class="gs gs4"></span></div>
+        <div class="gate-wrap">
+          <div class="gate-hero">
+            <div class="gate-logo" aria-hidden="true"><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></div>
+            <h2 class="gate-brand">Música</h2>
+            <p class="gate-claim">Todo lo que te gusta escuchar, en cualquier dispositivo.</p>
+            <ul class="gate-feats">
+              <li>${icon('people')}<span>Escucha a la vez con tus amigos en salas</span></li>
+              <li>${icon('lyrics')}<span>Letras sincronizadas y modo karaoke</span></li>
+              <li>${icon('radio')}<span>Recomendaciones y mezclas hechas para ti</span></li>
+              <li>${icon('heart')}<span>Tus listas e historial en todos tus dispositivos</span></li>
+            </ul>
+          </div>
+          <div class="gate-card"></div>
+        </div>`;
+    }
     const card = gateEl.querySelector('.gate-card');
+    card.innerHTML = `
+      <h1 id="gate-title">${reg ? 'Crea tu cuenta' : 'Te damos la bienvenida'}</h1>
+      <p class="gate-sub">${reg ? 'Solo un nombre de usuario y una contraseña. Sin correo.' : 'Entra para escuchar tu música, con tu inicio, favoritas e historial.'}</p>
+      <div class="gate-tabs${reg ? ' reg' : ''}" role="tablist">
+        <span class="gate-ind" aria-hidden="true"></span>
+        <button type="button" role="tab" aria-selected="${!reg}" class="${reg ? '' : 'on'}" data-m="login">Entrar</button>
+        <button type="button" role="tab" aria-selected="${reg}" class="${reg ? 'on' : ''}" data-m="register">Crear cuenta</button>
+      </div>`;
     const f = buildForm(mode, showGate);
     f.querySelector('[data-switch]').remove();        // aquí se cambia con las pestañas de arriba
     card.appendChild(f);
-    card.querySelectorAll('.gate-tabs button').forEach(b => b.onclick = () => { if (b.dataset.m !== mode) showGate(b.dataset.m); });
-    setTimeout(() => f.username.focus(), 50);
+    card.classList.remove('swap'); void card.offsetWidth; card.classList.add('swap');
+    card.querySelectorAll('.gate-tabs button').forEach(b => b.onclick = () => {
+      if (b.dataset.m === mode) return;
+      const u = f.username.value;
+      showGate(b.dataset.m);
+      const nf = gateEl.querySelector('.acct-form');     // lo escrito en el nombre se conserva
+      if (nf && u) nf.username.value = u;
+    });
+    setTimeout(() => f.username.value ? f.password.focus() : f.username.focus(), 50);
   }
 
   function accountMenu(origin) {
