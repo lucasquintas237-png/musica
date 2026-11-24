@@ -618,6 +618,12 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
 .rp-un{height:36px;padding:0 14px;font-size:13px}
 .rp-sec{margin:10px 4px 4px !important;font-size:13px;font-weight:600;color:var(--fg2)}
 .room-code{display:flex;gap:6px;margin:6px 0}
+.room-qr{display:flex;flex-direction:column;align-items:center;gap:12px;padding:0 8px 8px;text-align:center}
+.room-qr-code{width:min(260px,70vw);aspect-ratio:1;padding:10px;border-radius:24px;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.room-qr-code svg{display:block;width:100%;height:100%;border-radius:12px}
+.room-qr-txt span{width:36px;height:46px;font-size:22px;border-radius:12px}
+.room-qr p{margin:0;font-size:13.5px;max-width:320px}
+.room-qr .acct-actions{justify-content:center}
 .room-code span{width:44px;height:56px;display:grid;place-items:center;border-radius:14px;background:var(--primary-container);color:var(--on-primary-container);font-size:28px;font-weight:800;font-variation-settings:"ROND" 100}
 
 /* bienvenida: elegir artistas (welcome.js) */
@@ -1248,6 +1254,8 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
   <symbol id="i-album" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 14.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9zm0-5.5a1 1 0 100 2 1 1 0 000-2z"/></symbol>
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zM12 17a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></symbol>
   <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M12 7a5 5 0 014.9 6l3 3A11.8 11.8 0 0023 12c-1.7-4.4-6-7.5-11-7.5-1.4 0-2.7.2-4 .7l2.2 2.2c.6-.2 1.2-.4 1.8-.4zM2 4.3l2.3 2.3.5.4A11.8 11.8 0 001 12c1.7 4.4 6 7.5 11 7.5 1.5 0 3-.3 4.4-.8l.4.4L19.7 22 21 20.7 3.3 3 2 4.3zm5.5 5.5l1.6 1.6A3 3 0 0012 15c.2 0 .4 0 .6-.1l1.6 1.6c-.7.3-1.4.5-2.2.5a5 5 0 01-4.5-7.2zm4.3-.8l3.2 3.2V12a3 3 0 00-3-3h-.2z"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm8-2h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm-6 2h2v2h-2v-2zm4 0h2v4h-4v-2h2v-2zm-4 2h2v2h-2v-2z"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M18 16.1c-.8 0-1.4.3-2 .8l-7.1-4.2c.1-.2.1-.5.1-.7s0-.5-.1-.7L16 7.2c.5.5 1.2.8 2 .8 1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3c0 .2 0 .5.1.7L8 9.8C7.5 9.3 6.8 9 6 9c-1.7 0-3 1.3-3 3s1.3 3 3 3c.8 0 1.5-.3 2-.8l7.1 4.2c-.1.2-.1.4-.1.6 0 1.6 1.3 2.9 2.9 2.9s2.9-1.3 2.9-2.9-1.2-2.9-2.8-2.9z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
   <symbol id="i-discord" viewBox="0 0 24 24"><path d="M19.6 5.3A16.5 16.5 0 0015.5 4l-.5 1a15 15 0 00-6 0l-.5-1a16.4 16.4 0 00-4.1 1.3C1.8 9.2 1.1 13 1.4 16.7A16.6 16.6 0 006.4 19l1.1-1.7c-.6-.2-1.2-.5-1.7-.9l.4-.3a11.8 11.8 0 0011.6 0l.4.3c-.5.4-1.1.7-1.7.9l1.1 1.7a16.5 16.5 0 005-2.3c.4-4.3-.7-8-3-11.4zM8.7 14.5c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></symbol>
@@ -1380,6 +1388,7 @@ img.ok{animation:imgIn .55s var(--ease-emph)}
 <script src="profile.js"></script>
 <script src="discord.js"></script>
 <script src="artistinfo.js"></script>
+<script src="qr.js"></script>
 <script src="features.js"></script>
 <script src="sources.js"></script>
 <script src="now.js"></script>

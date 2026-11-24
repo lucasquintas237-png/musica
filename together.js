@@ -590,6 +590,26 @@ const Together = (() => {
     if (navigator.share) { try { await navigator.share({ title: 'Escuchar juntos', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
     try { await navigator.clipboard.writeText(url); toast('Enlace de la sala copiado'); } catch (_) { App.prompt('Copia este enlace', url, () => {}); }
   }
+  /* QR de la sala: se escanea con la cámara de otro móvil y abre la web directamente en la sala
+     (si esa persona aún no ha entrado en su cuenta, se une en cuanto entra) */
+  function qrSheet() {
+    if (!room || !window.QR) return;
+    const url = link(), code = room.code;
+    App.sheet({
+      title: 'Únete escaneando', sub: 'Con la cámara de otro móvil',
+      body: box => {
+        const w = el(`<div class="room-qr">
+          <div class="room-qr-code" aria-label="Código QR de la sala ${esc(code)}">${QR.svg(url, { dark: '#111', light: '#fff', margin: 3 })}</div>
+          <div class="room-code room-qr-txt" aria-hidden="true">${code.split('').map(c => `<span>${c}</span>`).join('')}</div>
+          <p class="muted">Apunta con la cámara al código y abre el enlace. También pueden escribir el código en «Escuchar juntos».</p>
+          <div class="acct-actions"><button class="btn tonal" type="button" data-q="copy">${icon('link')}Copiar enlace</button><button class="btn" type="button" data-q="share">${icon('share')}Compartir</button></div>
+        </div>`);
+        w.querySelector('[data-q=copy]').onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Enlace de la sala copiado'); } catch (_) { App.prompt('Copia este enlace', url, () => {}); } };
+        w.querySelector('[data-q=share]').onclick = invite;
+        box.appendChild(w);
+      }
+    });
+  }
   function infoSheet() {
     if (!room) return;
     App.sheet({
@@ -601,7 +621,7 @@ const Together = (() => {
           : 'Elige canciones para añadirlas a la cola de la sala. Suenan para todos cuando les toca.';
         const b = el(`<div class="room-sheet" data-code="${esc(room.code)}">
           <div class="room-code" aria-label="Código de la sala">${room.code.split('').map(c => `<span>${c}</span>`).join('')}</div>
-          <div class="acct-actions"><button class="btn tonal" data-r="leave" type="button">${room.isHost ? 'Cerrar sala' : 'Salir'}</button><button class="btn" data-r="invite" type="button">${icon('link')}Invitar</button></div>
+          <div class="acct-actions"><button class="btn tonal" data-r="leave" type="button">${room.isHost ? 'Cerrar sala' : 'Salir'}</button>${window.QR ? `<button class="btn tonal" data-r="qr" type="button">${icon('qr')}QR</button>` : ''}<button class="btn" data-r="invite" type="button">${icon('link')}Invitar</button></div>
           <div class="room-sync" aria-live="polite"></div>
           <div class="room-react" role="group" aria-label="Reacciones">${EMOJIS.map(e => `<button type="button" data-e="${e}" aria-label="Reaccionar con ${e}">${e}</button>`).join('')}</div>
           <p class="rp-sec">Cola de la sala</p>
@@ -615,6 +635,7 @@ const Together = (() => {
           <div class="room-conf"></div>
           <p class="muted" style="font-size:13.5px">${esc(hint)}</p></div>`);
         b.querySelector('[data-r=invite]').onclick = invite;
+        const qb = b.querySelector('[data-r=qr]'); if (qb) qb.onclick = qrSheet;
         b.querySelector('[data-r=leave]').onclick = () => { App.closeSheet(); leave(); };
         b.querySelectorAll('[data-e]').forEach(x => x.onclick = () => react(x.dataset.e));
         b.querySelector('.room-group').onclick = e => addForGroup(e.currentTarget);
