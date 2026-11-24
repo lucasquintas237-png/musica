@@ -923,6 +923,12 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
 .ai-compact .ai-facts,.ai-compact .ai-src{display:none}
 .ai-compact .ai-links{margin-top:10px}
 .ai-compact .ai-links .btn{height:36px;padding:0 14px;font-size:13.5px}
+/* textos largos que se desplazan (app.js Marquee) */
+.mq-box.mq{text-overflow:clip;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 8px,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(90deg,transparent,#000 8px,#000 calc(100% - 20px),transparent)}
+.mq-box.mq .mq-in{display:inline-block;padding-left:2px;will-change:transform;animation:mqScroll var(--mq-t,8s) cubic-bezier(.45,0,.55,1) infinite}
+@keyframes mqScroll{0%,18%{transform:translate3d(0,0,0)}50%,68%{transform:translate3d(calc(-1 * var(--mq)),0,0)}100%{transform:translate3d(0,0,0)}}
+@media (prefers-reduced-motion:reduce){ .mq-box.mq .mq-in{animation:none} .mq-box.mq{-webkit-mask-image:none;mask-image:none} }
 /* nombres de artista y álbum pulsables (reproductor y "Ahora suena") */
 .art-link{cursor:pointer;border-radius:4px;text-decoration-thickness:1px;text-underline-offset:3px}
 .art-link:hover,.art-link:focus-visible{text-decoration:underline;color:var(--fg);outline:0}

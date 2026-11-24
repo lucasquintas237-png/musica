@@ -553,8 +553,12 @@ function clean(t) { const o = { id: t.id || '', title: t.title || '', artist: t.
 /* Los artistas de una canción como enlaces: cada nombre lleva a su página (y el álbum, al suyo).
    Si no se sabe el id de alguno (canciones guardadas antes o de otras fuentes), se busca. */
 function splitArtists(t) {
-  const names = String(t.artist || '').split(/\s*,\s*|\s+&\s+/).map(s => s.trim()).filter(Boolean);
+  // por comas («Dimitri Vegas & Like Mike» es un solo artista); el «&» solo separa si así
+  // cuadra con los id que se conocen (YouTube a veces escribe «A, B & C»)
   const ids = t.artistIds ? t.artistIds.split(',') : [];
+  const split = re => String(t.artist || '').split(re).map(s => s.trim()).filter(Boolean);
+  let names = split(/\s*,\s*/);
+  if (ids.length && ids.length !== names.length) { const alt = split(/\s*,\s*|\s+&\s+/); if (alt.length === ids.length) names = alt; }
   return names.map((name, i) => ({ name, id: ids.length === names.length ? ids[i] : (i === 0 ? t.artistId || '' : '') }));
 }
 function artistLinks(box, t, withAlbum = true) {
@@ -597,6 +601,65 @@ function onArtistLink(e) {
 }
 document.addEventListener('click', onArtistLink, true);
 document.addEventListener('keydown', onArtistLink, true);
+
+/* Textos que no caben (título, artistas): se desplazan despacio para leerlos enteros, como en
+   Spotify: espera, avanza hasta el final, espera y vuelve. El contenido va dentro de un <span>
+   que se mueve con transform (lo hace la tarjeta gráfica: va fluido) y los enlaces de cada
+   artista se pueden seguir pulsando. Solo se reinicia si cambia el texto o el ancho. */
+const Marquee = (() => {
+  const SPEED = 30;                                   // píxeles por segundo
+  const els = new Set();
+  let busy = false;
+  function wrap(e) {
+    const w = e.firstChild;
+    if (w && w === e.lastChild && w.nodeType === 1 && w.classList.contains('mq-in')) return w;
+    const s = document.createElement('span');
+    s.className = 'mq-in';
+    busy = true;
+    while (e.firstChild) s.appendChild(e.firstChild);
+    e.appendChild(s);
+    mo.takeRecords();                                 // nuestros cambios no cuentan
+    busy = false;
+    return s;
+  }
+  function measure(e) {
+    if (!e.isConnected) return;
+    const inner = wrap(e);
+    const w = e.clientWidth, full = inner.scrollWidth || inner.getBoundingClientRect().width;
+    const sig = e.textContent + '|' + w;
+    if (sig === e._mqSig) return;                     // nada cambió: la animación sigue donde iba
+    e._mqSig = sig;
+    e.classList.remove('mq');
+    const over = full - w;
+    if (!w || over < 4) return;
+    const dist = Math.ceil(over + 14);
+    // ciclo: 18 % quieto, 32 % avanza, 18 % quieto, 32 % vuelve
+    e.style.setProperty('--mq', dist + 'px');
+    e.style.setProperty('--mq-t', Math.max(7, dist / SPEED / .32).toFixed(2) + 's');
+    void inner.offsetWidth;
+    e.classList.add('mq');
+  }
+  const pending = new Set();
+  let raf = 0;
+  const schedule = e => { pending.add(e); if (!raf) raf = requestAnimationFrame(() => { raf = 0; pending.forEach(measure); pending.clear(); }); };
+  const mo = new MutationObserver(list => { if (busy) return; list.forEach(m => { let n = m.target; while (n && !els.has(n)) n = n.parentNode; if (n) schedule(n); }); });
+  const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(list => list.forEach(r => schedule(r.target))) : null;
+  function watch(sel) {
+    document.querySelectorAll(sel).forEach(e => {
+      if (els.has(e)) return;
+      els.add(e);
+      e.classList.add('mq-box');
+      mo.observe(e, { childList: true, characterData: true, subtree: true });
+      ro && ro.observe(e);
+      schedule(e);
+    });
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    watch('#p-title, #p-artist, #n-title, #n-artist, #mini .t, #mini .s');
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => els.forEach(schedule));
+  }, { once: true });
+  return { watch, refresh: () => els.forEach(schedule) };
+})();
 
 /* ======================================================================= app */
 const App = {
