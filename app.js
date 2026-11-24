@@ -163,6 +163,8 @@ const YTM = (() => {
     if (!artist) artist = parts.find(p => !TYPE_WORDS.test(p) && !isDur(p) && !/^\d{4}$/.test(p) && !/reproducci|visualiza|usuarios|views|suscript/i.test(p)) || '';
     return {
       artist, artistId: artists[0] ? browseId(artists[0]) : '',
+      // los id de todos los artistas, en el mismo orden que los nombres (para poder pulsar cada uno)
+      artistIds: artists.length > 1 ? artists.map(a => browseId(a) || '').join(',') : '',
       album: albumRun ? albumRun.text : '', albumId: albumRun ? browseId(albumRun) : '',
       year: (parts.find(p => /^\d{4}$/.test(p)) || ''), parts
     };
@@ -182,7 +184,7 @@ const YTM = (() => {
     const mvt = walk(we, 'musicVideoType')[0] || '';
     return {
       kind: id ? 'song' : /ALBUM/.test(pt) ? 'album' : /ARTIST|USER_CHANNEL/.test(pt) ? 'artist' : /PLAYLIST/.test(pt) ? 'playlist' : 'other',
-      id, title, artist: m.artist, artistId: m.artistId, album: m.album, albumId: m.albumId, year: m.year,
+      id, title, artist: m.artist, artistId: m.artistId, artistIds: m.artistIds, album: m.album, albumId: m.albumId, year: m.year,
       dur: durS ? parseDur(durS) : 0, cover: cover(thumb(r.thumbnail)), browseId: browseId(r) || '',
       sub: m.parts.join(' • '), video: mvt && mvt !== 'MUSIC_VIDEO_TYPE_ATV', mvt
     };
@@ -206,7 +208,7 @@ const YTM = (() => {
     const m = fromRuns(by);
     const mvt = walk(v.navigationEndpoint, 'musicVideoType')[0] || '';
     return {
-      kind: 'song', id: v.videoId, title: txt(v.title), artist: m.artist || txt(v.shortBylineText), artistId: m.artistId,
+      kind: 'song', id: v.videoId, title: txt(v.title), artist: m.artist || txt(v.shortBylineText), artistId: m.artistId, artistIds: m.artistIds,
       album: m.album, albumId: m.albumId, dur: parseDur(txt(v.lengthText)), cover: cover(thumb(v.thumbnail)),
       video: mvt && mvt !== 'MUSIC_VIDEO_TYPE_ATV', mvt
     };
@@ -214,6 +216,7 @@ const YTM = (() => {
   const clean = t => {
     const o = { id: t.id, title: t.title, artist: t.artist, artistId: t.artistId || '', album: t.album || '', albumId: t.albumId || '', dur: t.dur || 0, cover: t.cover || '' };
     if (t.mvt === 'MUSIC_VIDEO_TYPE_ATV') o.atv = true;   // ya es la pista de audio oficial
+    if (t.artistIds) o.artistIds = t.artistIds;
     return o;
   };
 
@@ -545,7 +548,55 @@ const Library = {
     store.set('stats', s);
   }
 };
-function clean(t) { return { id: t.id || '', title: t.title || '', artist: t.artist || '', artistId: t.artistId || '', album: t.album || '', albumId: t.albumId || '', dur: t.dur || 0, cover: t.cover || '' }; }
+function clean(t) { const o = { id: t.id || '', title: t.title || '', artist: t.artist || '', artistId: t.artistId || '', album: t.album || '', albumId: t.albumId || '', dur: t.dur || 0, cover: t.cover || '' }; if (t.artistIds) o.artistIds = t.artistIds; return o; }
+
+/* Los artistas de una canción como enlaces: cada nombre lleva a su página (y el álbum, al suyo).
+   Si no se sabe el id de alguno (canciones guardadas antes o de otras fuentes), se busca. */
+function splitArtists(t) {
+  const names = String(t.artist || '').split(/\s*,\s*|\s+&\s+/).map(s => s.trim()).filter(Boolean);
+  const ids = t.artistIds ? t.artistIds.split(',') : [];
+  return names.map((name, i) => ({ name, id: ids.length === names.length ? ids[i] : (i === 0 ? t.artistId || '' : '') }));
+}
+function artistLinks(box, t, withAlbum = true) {
+  box.textContent = '';
+  if (!t) return;
+  splitArtists(t).forEach((a, i) => {
+    if (i) box.appendChild(document.createTextNode(', '));
+    const s = document.createElement('span');
+    s.className = 'art-link'; s.textContent = a.name; s.dataset.name = a.name;
+    if (a.id) s.dataset.id = a.id;
+    s.setAttribute('role', 'link'); s.tabIndex = 0;
+    box.appendChild(s);
+  });
+  if (withAlbum && t.album) {
+    box.appendChild(document.createTextNode(' — '));
+    const s = document.createElement('span');
+    s.textContent = t.album;
+    if (t.albumId) { s.className = 'art-link alb-link'; s.dataset.album = t.albumId; s.setAttribute('role', 'link'); s.tabIndex = 0; }
+    box.appendChild(s);
+  }
+}
+async function openArtistByName(name, id) {
+  if (id) return Features.openArtist(id, { title: name });
+  try {
+    const res = await YTM.search(name, 'artists');
+    const list = (res || []).filter(x => x.kind === 'artist' && x.browseId);
+    const hit = list.find(x => x.title.toLowerCase() === name.toLowerCase()) || list[0];
+    if (hit) return Features.openArtist(hit.browseId, { title: hit.title, cover: hit.cover });
+  } catch (_) {}
+  toast('No se encontró a ' + name);
+}
+// un clic (o Intro) en cualquier enlace de artista o álbum
+function onArtistLink(e) {
+  const a = e.target.closest && e.target.closest('.art-link');
+  if (!a || (e.type === 'keydown' && e.key !== 'Enter')) return;
+  e.preventDefault(); e.stopPropagation();
+  if ($('#player').classList.contains('open')) App.closePlayer();
+  if (a.dataset.album) return Features.openAlbum(a.dataset.album, { title: a.textContent });
+  openArtistByName(a.dataset.name, a.dataset.id);
+}
+document.addEventListener('click', onArtistLink, true);
+document.addEventListener('keydown', onArtistLink, true);
 
 /* ======================================================================= app */
 const App = {
@@ -751,7 +802,7 @@ const App = {
     $('.t', mini).textContent = t.title;
     $('.s', mini).textContent = t.artist;
     $('#p-title').textContent = t.title;
-    $('#p-artist').textContent = t.artist + (t.album ? ' — ' + t.album : '');
+    artistLinks($('#p-artist'), t);
     $('#p-from').textContent = this.state.from || t.album || t.artist || '—';
     $('#player .p-cover').src = t.cover || PLACEHOLDER;
     $('#p-dur').textContent = fmt(t.dur);
@@ -1261,7 +1312,7 @@ const App = {
       }[a] || (() => {}))();
     });
     $('#mini').addEventListener('click', () => this.openPlayer());
-    $('#p-artist').addEventListener('click', () => { const t = this.current; if (t && t.artistId) { this.closePlayer(); Features.openArtist(t.artistId, { title: t.artist }); } });
+    // los nombres de artista (y el álbum) del reproductor se pulsan uno a uno: ver onArtistLink
 
     // deslizar hacia abajo para cerrar el reproductor
     const stage = $('#player .p-stage');

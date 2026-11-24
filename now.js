@@ -51,7 +51,7 @@ const NowPanel = (() => {
     const src = t.cover || PLACEHOLDER;
     if (img.getAttribute('src') !== src) img.src = src;
     $n('n-title').textContent = t.title;
-    $n('n-artist').textContent = t.artist + (t.album ? ' — ' + t.album : '');
+    artistLinks($n('n-artist'), t);
     $n('n-from').textContent = App.state.from || t.album || t.artist || '—';
     $n('n-dur').textContent = fmt(t.dur);
   }
