@@ -929,6 +929,10 @@ body.in-room .tab,body.in-room .view{padding-top:calc(env(safe-area-inset-top,0p
 .ai-compact .ai-facts,.ai-compact .ai-src{display:none}
 .ai-compact .ai-links{margin-top:10px}
 .ai-compact .ai-links .btn{height:36px;padding:0 14px;font-size:13.5px}
+/* dentro de Assetto Corsa (app MusicaAC): sin efectos caros (desenfoques, auras, fondos animados) */
+.in-ac *,.in-ac *::before,.in-ac *::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.in-ac .gate-bg{display:none}
+.in-ac #auth-gate{background:radial-gradient(120% 80% at 50% 0%,var(--primary-container),var(--surface) 70%)}
 /* textos largos que se desplazan (app.js Marquee) */
 .mq-box.mq{text-overflow:clip;
   -webkit-mask-image:linear-gradient(90deg,transparent,#000 8px,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(90deg,transparent,#000 8px,#000 calc(100% - 20px),transparent)}

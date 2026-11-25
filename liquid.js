@@ -610,7 +610,9 @@ void main() {
     cv.setAttribute('aria-hidden', 'true');
     const host = document.getElementById('bg');
     host ? host.after(cv) : document.body.prepend(cv);
-    try { supported = ok = initGL(); } catch (e) { console.warn('Liquid:', e); supported = ok = false; }
+    // en la pantalla del coche de Assetto Corsa (app MusicaAC) no: le quitaría rendimiento al juego
+    if (/MusicaAC\//.test(navigator.userAgent)) supported = ok = false;
+    else try { supported = ok = initGL(); } catch (e) { console.warn('Liquid:', e); supported = ok = false; }
     if (ok) resize();
     cv.addEventListener('webglcontextlost', e => { e.preventDefault(); ok = false; apply(); });
     cv.addEventListener('webglcontextrestored', () => { try { ok = initGL(); } catch (_) { ok = false; } if (ok) resize(); apply(); });

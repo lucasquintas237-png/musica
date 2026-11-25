@@ -12,6 +12,11 @@ const parseDur = t => (t || '').trim().split(':').reduce((a, b) => a * 60 + (+b 
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
 
+/* Abierta desde la app «Música» del Android Auto de Assetto Corsa (assetto-corsa/musica): la
+   pantalla es pequeña y apaisada y el juego necesita el rendimiento, así que van menos efectos. */
+const IN_AC = /MusicaAC\//.test(navigator.userAgent);
+if (IN_AC) document.documentElement.classList.add('in-ac');
+
 /* Datos en el navegador. Cada cuenta tiene su propio espacio ("mz:u:<nombre>:"); sin sesión se
    usa el de invitado ("mz:"). account.js cambia el espacio y sincroniza con el servidor. */
 const store = {
