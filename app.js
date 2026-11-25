@@ -14,7 +14,7 @@ function el(html) { const t = document.createElement('template'); t.innerHTML = 
 
 /* Abierta desde la app «Música» del Android Auto de Assetto Corsa (assetto-corsa/musica): la
    pantalla es pequeña y apaisada y el juego necesita el rendimiento, así que van menos efectos. */
-const IN_AC = /MusicaAC\//.test(navigator.userAgent);
+const IN_AC = /MusicaAC\//.test(navigator.userAgent) || /[?&]ac=1\b/.test(location.search);   // ?ac=1: para probarlo fuera del juego
 if (IN_AC) document.documentElement.classList.add('in-ac');
 
 /* Datos en el navegador. Cada cuenta tiene su propio espacio ("mz:u:<nombre>:"); sin sesión se
