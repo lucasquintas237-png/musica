@@ -18,18 +18,58 @@ local HOME = 'https://musica.lucasquintas237.workers.dev/'
 local UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36 MusicaAC/1.0'
 local DENSITY = 0.8
 
+local DOMAIN = 'musica.lucasquintas237.workers.dev'
+local COOKIE = 'ms_session'
+
 local page ---@type WebBrowser
 local keyboard
 local navbar, navbarActive, navbarHold = 0, 0, 0
 local btnSize = vec2(32, 32)
 
+--[[ Sesión guardada: el navegador del juego no siempre conserva las cookies entre partidas, así
+  que la app guarda la de la sesión en su propio almacenamiento de Assetto Corsa y la vuelve a
+  poner antes de abrir la web. Si cierras sesión en la web, la copia también se borra. ]]
+local saved = ac.storage({ session = '', sessionUntil = 0 })
+local nextSessionCheck = 0
+local sessionSeen = false         -- en esta partida ya hubo sesión (para saber si luego la cerraste)
+
+local function restoreSession(p)
+  local v = saved.session
+  if type(v) ~= 'string' or not v:match('^%x+$') or (tonumber(saved.sessionUntil) or 0) < os.time() then return end
+  p:setCookie(HOME, {
+    name = COOKIE, value = v, domain = DOMAIN, path = '/', secure = true, HTTPOnly = true,
+    creationTime = os.time(), lastAccessTime = os.time(), expirationTime = tonumber(saved.sessionUntil)
+  })
+end
+
+local function backupSession(p)
+  p:getCookiesAsync('detailed', HOME, function (list)
+    local found
+    for _, c in ipairs(list or {}) do
+      if c.name == COOKIE then found = c end
+    end
+    if found and type(found.value) == 'string' and found.value:match('^%x+$') then
+      sessionSeen = true
+      if saved.session ~= found.value then
+        saved.session = found.value
+        saved.sessionUntil = (tonumber(found.expirationTime) or 0) > os.time() and found.expirationTime or os.time() + 180 * 86400
+      end
+    elseif list and sessionSeen and saved.session ~= '' then
+      saved.session = ''        -- ha cerrado sesión (o caducó): se olvida
+      saved.sessionUntil = 0
+    end
+  end)
+end
+
 local function getPage()
   if page then return page end
   page = WebBrowser({
-    dataKey = '',                 -- mismo perfil que la app Web: la sesión iniciada se conserva
+    dataKey = 'musica',           -- perfil propio del navegador (cookies, datos de la web)
     backgroundColor = rgbm(0.06, 0.06, 0.07, 1),
     redirectAudio = false,
   })
+  restoreSession(page)            -- antes de cargar la web, para que entre ya con la sesión
+  page
     :setMobileMode('landscape')
     :setColorScheme('dark')
     :setPixelDensity(DENSITY)
@@ -53,6 +93,11 @@ return function (dt)
   touchscreen.boostFrameRate()
 
   local p = getPage()
+  -- cada 20 s se copia la sesión (tras entrar, al renovarse o al cerrarla)
+  if os.preciseClock() > nextSessionCheck and not p:loading() then
+    nextSessionCheck = os.preciseClock() + 20
+    backupSession(p)
+  end
   local size = ui.availableSpace()
   ui.dummy(size)
   p:resize(size * (1 / DENSITY))
